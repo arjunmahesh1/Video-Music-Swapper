@@ -1,3 +1,5 @@
+_Motivation_: Was watching an ad, and I realized I didn't skip it and watched the whole ad because I liked the song. Thought to myself, in this day of hyper-tuned personalization, why isn't there a better and more certain way of ad engagement?
+
 # Video-Music-Swapper
 Swap any video’s soundtrack with a new audio track in one command or via a one‑page Streamlit demo.
 
