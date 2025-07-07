@@ -1,15 +1,26 @@
 # Video-Music-Swapper
-Swapping out music within an uploaded video
+Swap any video’s soundtrack with a new audio track in one command or via a one‑page Streamlit demo.
+
+## UI APP:
+pip install streamlit
+streamlit run app.py
+
+
+
+## CLI USAGE:
 
 Save audios in /audio, save video to swap in /video
 
-USAGE:
+pip install ffmpeg
+
   Single pair
 
   python swap_audio.py --video video/myclip.mp4 --audio "audio/my song.mp3" --output out.mp4
 
 
+
   Batch‑process every video×audio permutation in the default folders
+
   python swap_audio.py
 
 
@@ -17,6 +28,16 @@ USAGE:
 
   python swap_audio.py --video C:/stuff/v1.mp4 --audio C:/stuff/sound.wav
 
-
-
 >>> out.mp4
+
+
+
+
+
+
+
+The CLI has --videos-dir and --audio-dir flags to point batch mode anywhere.
+
+To fade the new track out, edit swap_audio.py and add an audio‑filter: -af "afade=t=out:st=<sec>:d=2".
+
+Re‑encode video for wider compatibility by swapping -c:v copy for e.g. -c:v libx264 -crf 20.
