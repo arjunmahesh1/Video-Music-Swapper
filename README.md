@@ -15,7 +15,7 @@ Either clone repo - or download app.py + swap_audio and install ffmpeg/streamlit
 ## GUI APP (easiest):
 > pip install streamlit
 
-streamlit run app.py
+> streamlit run app.py
 
 
 
