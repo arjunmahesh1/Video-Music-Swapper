@@ -31,7 +31,6 @@ def swap_audio(video_path: Path, audio_path: Path, output_path: Path) -> None:
     print(f"✅  Created {rel}\n")
 
 def iter_media_files(directory: str, exts: set[str]):
-    """Yield Path objects in *directory* whose suffix is in *exts*."""
     for f in Path(directory).glob("*"):
         if f.suffix.lower() in exts and f.is_file():
             yield f
