@@ -6,6 +6,12 @@ Future:
 - Spotify API integration
 - Audio optimization
 
+
+
+
+# RUN:
+Either clone repo - or download app.py + swap_audio and install ffmpeg/streamlit
+
 ## UI APP:
 pip install streamlit
 streamlit run app.py
