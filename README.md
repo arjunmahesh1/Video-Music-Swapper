@@ -13,7 +13,7 @@ Future:
 Either clone repo - or download app.py + swap_audio and install ffmpeg/streamlit
 
 ## GUI APP (easiest):
-pip install streamlit
+> pip install streamlit
 
 streamlit run app.py
 
@@ -23,22 +23,22 @@ streamlit run app.py
 
 Save audios in /audio, save video to swap in /video
 
-pip install ffmpeg
+> pip install ffmpeg
 
   _Single pair_:
 
-  python swap_audio.py --video video/myclip.mp4 --audio "audio/my song.mp3" --output out.mp4
+  > python swap_audio.py --video video/myclip.mp4 --audio "audio/my song.mp3" --output out.mp4
 
 
 
   _Batch‑process every video×audio permutation in the default folders_:
 
-  python swap_audio.py
+  > python swap_audio.py
 
 
   Can point to any folder/filename
 
-  python swap_audio.py --video C:/stuff/v1.mp4 --audio C:/stuff/sound.wav
+  > python swap_audio.py --video C:/stuff/v1.mp4 --audio C:/stuff/sound.wav
 
 -> out.mp4
 
