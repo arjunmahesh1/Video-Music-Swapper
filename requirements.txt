@@ -1,0 +1,6 @@
+Flask
+spotipy
+requests
+moviepy
+python-dotenv
+ffmpeg
