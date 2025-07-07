@@ -1,6 +1,11 @@
 # Video-Music-Swapper
 Swap any video’s soundtrack with a new audio track in one command or via a one‑page Streamlit demo.
 
+Future:
+
+- Spotify API integration
+- Audio optimization
+
 ## UI APP:
 pip install streamlit
 streamlit run app.py
