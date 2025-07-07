@@ -12,8 +12,9 @@ Future:
 # RUN:
 Either clone repo - or download app.py + swap_audio and install ffmpeg/streamlit
 
-## UI APP:
+## GUI APP (easiest):
 pip install streamlit
+
 streamlit run app.py
 
 
@@ -24,13 +25,13 @@ Save audios in /audio, save video to swap in /video
 
 pip install ffmpeg
 
-  Single pair
+  _Single pair_:
 
   python swap_audio.py --video video/myclip.mp4 --audio "audio/my song.mp3" --output out.mp4
 
 
 
-  Batch‑process every video×audio permutation in the default folders
+  _Batch‑process every video×audio permutation in the default folders_:
 
   python swap_audio.py
 
@@ -39,13 +40,13 @@ pip install ffmpeg
 
   python swap_audio.py --video C:/stuff/v1.mp4 --audio C:/stuff/sound.wav
 
->>> out.mp4
+-> out.mp4
 
 
 
 
 
-
+#### Advanced
 
 The CLI has --videos-dir and --audio-dir flags to point batch mode anywhere.
 
