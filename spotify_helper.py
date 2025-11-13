@@ -1,0 +1,272 @@
+"""Spotify integration for fetching user's liked songs and downloading tracks."""
+import os
+import spotipy
+from spotipy.oauth2 import SpotifyOAuth
+from dotenv import load_dotenv
+from pathlib import Path
+import subprocess
+import tempfile
+
+load_dotenv()
+
+class SpotifyManager:
+    def __init__(self):
+        self.scope = "user-library-read user-top-read"
+        self.sp = None
+
+    def authenticate(self):
+        """Authenticate with Spotify using OAuth."""
+        try:
+            auth_manager = SpotifyOAuth(
+                client_id=os.getenv("SPOTIPY_CLIENT_ID"),
+                client_secret=os.getenv("SPOTIPY_CLIENT_SECRET"),
+                redirect_uri=os.getenv("SPOTIPY_REDIRECT_URI"),
+                scope=self.scope,
+                cache_path=".spotify_cache",
+                open_browser=False,  # Don't auto-open browser
+                show_dialog=False     # Don't show dialog prompts
+            )
+
+            # Check if we have a cached token
+            token_info = auth_manager.get_cached_token()
+
+            if not token_info:
+                # No token available - need to authenticate first
+                return False
+
+            self.sp = spotipy.Spotify(auth=token_info['access_token'], auth_manager=auth_manager)
+
+            # Test the connection
+            self.sp.current_user()
+            return True
+        except Exception as e:
+            print(f"Authentication failed: {e}")
+            return False
+
+    def get_auth_url(self):
+        """Get the Spotify authorization URL for manual authentication."""
+        auth_manager = SpotifyOAuth(
+            client_id=os.getenv("SPOTIPY_CLIENT_ID"),
+            client_secret=os.getenv("SPOTIPY_CLIENT_SECRET"),
+            redirect_uri=os.getenv("SPOTIPY_REDIRECT_URI"),
+            scope=self.scope,
+            cache_path=".spotify_cache",
+            open_browser=False,
+            show_dialog=False
+        )
+        return auth_manager.get_authorize_url()
+
+    def handle_redirect_code(self, code):
+        """Handle the authorization code from redirect URL."""
+        try:
+            auth_manager = SpotifyOAuth(
+                client_id=os.getenv("SPOTIPY_CLIENT_ID"),
+                client_secret=os.getenv("SPOTIPY_CLIENT_SECRET"),
+                redirect_uri=os.getenv("SPOTIPY_REDIRECT_URI"),
+                scope=self.scope,
+                cache_path=".spotify_cache",
+                open_browser=False,
+                show_dialog=False
+            )
+            # Exchange code for token
+            token_info = auth_manager.get_access_token(code, as_dict=True)
+            return token_info is not None
+        except Exception as e:
+            print(f"Failed to handle redirect code: {e}")
+            return False
+
+    def get_liked_songs(self, limit=50):
+        """Fetch user's liked songs.
+
+        Args:
+            limit: Maximum number of songs to fetch (default 50, max per request is 50)
+
+        Returns:
+            List of dicts with keys: name, artist, uri, spotify_url
+        """
+        if not self.sp:
+            raise Exception("Not authenticated. Call authenticate() first.")
+
+        songs = []
+        results = self.sp.current_user_saved_tracks(limit=limit)
+
+        for item in results['items']:
+            track = item['track']
+            songs.append({
+                'name': track['name'],
+                'artist': track['artists'][0]['name'],
+                'uri': track['uri'],
+                'spotify_url': track['external_urls']['spotify'],
+                'display_name': f"{track['artists'][0]['name']} - {track['name']}",
+                'id': track['id']
+            })
+
+        # Fetch more if available
+        while results['next'] and len(songs) < limit:
+            results = self.sp.next(results)
+            for item in results['items']:
+                track = item['track']
+                songs.append({
+                    'name': track['name'],
+                    'artist': track['artists'][0]['name'],
+                    'uri': track['uri'],
+                    'spotify_url': track['external_urls']['spotify'],
+                    'display_name': f"{track['artists'][0]['name']} - {track['name']}",
+                    'id': track['id']
+                })
+
+        return songs
+
+    def get_top_tracks(self, limit=50, time_range='medium_term'):
+        """Fetch user's top tracks.
+
+        Args:
+            limit: Maximum number of tracks (max 50)
+            time_range: 'short_term' (4 weeks), 'medium_term' (6 months), 'long_term' (years)
+
+        Returns:
+            List of track dicts
+        """
+        if not self.sp:
+            raise Exception("Not authenticated. Call authenticate() first.")
+
+        songs = []
+        results = self.sp.current_user_top_tracks(limit=limit, time_range=time_range)
+
+        for track in results['items']:
+            songs.append({
+                'name': track['name'],
+                'artist': track['artists'][0]['name'],
+                'uri': track['uri'],
+                'spotify_url': track['external_urls']['spotify'],
+                'display_name': f"{track['artists'][0]['name']} - {track['name']}",
+                'id': track['id']
+            })
+
+        return songs
+
+    def get_combined_library(self, liked_limit=50, top_limit=50):
+        """Get combined set of liked songs and top tracks (deduplicated).
+
+        Args:
+            liked_limit: Max liked songs to fetch
+            top_limit: Max top tracks to fetch
+
+        Returns:
+            List of unique tracks
+        """
+        liked = self.get_liked_songs(limit=liked_limit)
+        top = self.get_top_tracks(limit=top_limit)
+
+        # Deduplicate by URI
+        seen_uris = set()
+        combined = []
+
+        for song in liked + top:
+            if song['uri'] not in seen_uris:
+                seen_uris.add(song['uri'])
+                combined.append(song)
+
+        return combined
+
+    def get_audio_features_batch(self, track_ids):
+        """Get audio features for multiple tracks at once.
+
+        Args:
+            track_ids: List of Spotify track IDs
+
+        Returns:
+            Dict mapping track_id -> audio features
+        """
+        if not self.sp:
+            raise Exception("Not authenticated. Call authenticate() first.")
+
+        # Spotify API allows max 100 tracks per request
+        features_map = {}
+
+        # Process in smaller batches (50 instead of 100) to avoid issues
+        for i in range(0, len(track_ids), 50):
+            batch = track_ids[i:i+50]
+
+            try:
+                results = self.sp.audio_features(batch)
+
+                for track_id, features in zip(batch, results):
+                    if features:  # Some tracks may not have audio features
+                        features_map[track_id] = {
+                            'tempo': features['tempo'],
+                            'energy': features['energy'],
+                            'valence': features['valence'],
+                            'danceability': features['danceability'],
+                            'acousticness': features['acousticness'],
+                            'instrumentalness': features['instrumentalness'],
+                            'speechiness': features['speechiness']
+                        }
+            except Exception as e:
+                print(f"Warning: Failed to get audio features for batch starting at index {i}: {str(e)}")
+                # Continue with next batch instead of failing completely
+                continue
+
+        return features_map
+
+    def get_user_playlists(self):
+        """Fetch user's playlists."""
+        if not self.sp:
+            raise Exception("Not authenticated. Call authenticate() first.")
+
+        playlists = []
+        results = self.sp.current_user_playlists()
+
+        for item in results['items']:
+            playlists.append({
+                'name': item['name'],
+                'id': item['id'],
+                'tracks_count': item['tracks']['total']
+            })
+
+        return playlists
+
+def download_spotify_track(spotify_url, output_path=None):
+    """Download a Spotify track using spotdl.
+
+    Args:
+        spotify_url: Spotify track URL or URI
+        output_path: Path to save the downloaded file (default: temp file)
+
+    Returns:
+        Path to downloaded file
+    """
+    if output_path is None:
+        # Create temp file
+        temp_dir = tempfile.gettempdir()
+        output_path = Path(temp_dir) / "spotify_track.mp3"
+    else:
+        output_path = Path(output_path)
+
+    # Remove existing file if it exists
+    if output_path.exists():
+        output_path.unlink()
+
+    # Download using spotdl
+    cmd = [
+        "spotdl",
+        "download",
+        spotify_url,
+        "--output", str(output_path.parent / "{artists} - {title}.{output-ext}"),
+        "--format", "mp3"
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        raise Exception(f"spotdl failed: {result.stderr}")
+
+    # Find the downloaded file (spotdl uses artist - title format)
+    downloaded_files = list(output_path.parent.glob("*.mp3"))
+    if not downloaded_files:
+        raise Exception("Download succeeded but file not found")
+
+    # Get the most recently created file
+    latest_file = max(downloaded_files, key=lambda p: p.stat().st_mtime)
+
+    return latest_file

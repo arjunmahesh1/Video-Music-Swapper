@@ -1,6 +1,8 @@
-Flask
+streamlit
 spotipy
-requests
-moviepy
+spotdl
 python-dotenv
-ffmpeg
+ffmpeg-python
+librosa
+numpy
+scipy
