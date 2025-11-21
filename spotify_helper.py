@@ -145,11 +145,11 @@ class SpotifyManager:
 
         return songs
 
-    def get_combined_library(self, liked_limit=50, top_limit=50):
+    def get_combined_library(self, liked_limit=200, top_limit=50):
         """Get combined set of liked songs and top tracks (deduplicated).
 
         Args:
-            liked_limit: Max liked songs to fetch
+            liked_limit: Max liked songs to fetch (increased to 200 for better matching)
             top_limit: Max top tracks to fetch
 
         Returns:
@@ -184,6 +184,17 @@ class SpotifyManager:
         # Spotify API allows max 100 tracks per request
         features_map = {}
 
+        # Try fetching one track first to test if API access works
+        if len(track_ids) > 0:
+            try:
+                test_result = self.sp.audio_features([track_ids[0]])
+                print(f"✓ Successfully fetched test audio features")
+            except Exception as e:
+                print(f"✗ Test audio features request failed: {str(e)}")
+                # If even a single track fails, the API access is blocked
+                # Return empty dict - the error will be caught upstream
+                return {}
+
         # Process in smaller batches (50 instead of 100) to avoid issues
         for i in range(0, len(track_ids), 50):
             batch = track_ids[i:i+50]
@@ -202,10 +213,15 @@ class SpotifyManager:
                             'instrumentalness': features['instrumentalness'],
                             'speechiness': features['speechiness']
                         }
+                print(f"✓ Fetched features for batch {i//50 + 1}")
             except Exception as e:
-                print(f"Warning: Failed to get audio features for batch starting at index {i}: {str(e)}")
+                print(f"✗ Batch {i//50 + 1} failed: {str(e)}")
                 # Continue with next batch instead of failing completely
                 continue
+
+        if not features_map:
+            print(f"✗ CRITICAL: No audio features could be fetched for any songs!")
+            print(f"✗ This indicates your Spotify app may not have API access enabled")
 
         return features_map
 

@@ -9,6 +9,7 @@ from audio_analyzer import (
     calculate_similarity,
     select_song_probabilistic
 )
+from musicbrainz_features import batch_get_features
 
 VIDEO_DIR = Path(__file__).with_name("video")
 AUDIO_DIR = Path(__file__).with_name("audio")
@@ -43,34 +44,36 @@ if not Path(".env").exists():
 # Spotify Authentication Section
 st.sidebar.header("🎧 Spotify Integration")
 
-if not st.session_state.spotify_authenticated:
-    st.sidebar.markdown("**Step 1:** Authorize the app")
-    auth_url = st.session_state.spotify_manager.get_auth_url()
-    st.sidebar.markdown(f"[🔐 Click here to authorize Spotify]({auth_url})")
+# Check if we're being redirected back from Spotify with an auth code
+query_params = st.query_params
+auth_code = query_params.get("code", None)
 
-    st.sidebar.markdown("**Step 2:** After authorizing, click below:")
-    if st.sidebar.button("✅ I've Authorized - Connect Now"):
-        with st.spinner("Connecting to Spotify..."):
-            try:
-                if st.session_state.spotify_manager.authenticate():
-                    st.session_state.spotify_authenticated = True
-                    # Fetch combined library (liked + top tracks)
-                    st.session_state.user_library = st.session_state.spotify_manager.get_combined_library(
-                        liked_limit=50, top_limit=50
-                    )
-                    st.sidebar.success(f"✅ Connected! Found {len(st.session_state.user_library)} songs")
-                    st.rerun()
-                else:
-                    st.sidebar.error("❌ Authentication failed. Make sure you authorized the app first.")
-            except Exception as e:
-                st.sidebar.error(f"❌ Error: {str(e)}")
-                st.sidebar.info("Try clicking the authorization link again, then come back and click 'I've Authorized'")
+if auth_code and not st.session_state.spotify_authenticated:
+    # We have an auth code from Spotify redirect - exchange it for a token
+    with st.spinner("Completing authentication..."):
+        if st.session_state.spotify_manager.handle_redirect_code(auth_code):
+            # Now try to authenticate with the cached token
+            if st.session_state.spotify_manager.authenticate():
+                st.session_state.spotify_authenticated = True
+                st.session_state.user_library = st.session_state.spotify_manager.get_combined_library(
+                    liked_limit=200, top_limit=50
+                )
+                # Clear the code from URL
+                st.query_params.clear()
+                st.rerun()
+
+if not st.session_state.spotify_authenticated:
+    if st.sidebar.button("🔐 Connect Spotify", type="primary"):
+        # Generate auth URL and redirect
+        auth_url = st.session_state.spotify_manager.get_auth_url()
+        st.markdown(f'<meta http-equiv="refresh" content="0;url={auth_url}">', unsafe_allow_html=True)
+        st.stop()
 else:
     st.sidebar.success(f"✅ Spotify Connected")
     st.sidebar.caption(f"{len(st.session_state.user_library)} songs in library")
     if st.sidebar.button("🔄 Refresh Library"):
         st.session_state.user_library = st.session_state.spotify_manager.get_combined_library(
-            liked_limit=50, top_limit=50
+            liked_limit=200, top_limit=50
         )
         st.session_state.audio_features_cache = {}  # Clear cache
         st.sidebar.success("Refreshed!")
@@ -244,17 +247,18 @@ if st.button(button_text, type="primary", disabled=not button_enabled):
                 st.error(f"❌ Failed to analyze audio: {str(e)}")
                 st.stop()
 
-            # Get audio features for user's library
+            # Get audio features using heuristic estimation (Spotify removed Audio Features API)
             if not st.session_state.audio_features_cache:
-                st.info(f"📊 Fetching audio features for {len(st.session_state.user_library)} songs...")
-                track_ids = [song['id'] for song in st.session_state.user_library]
-                try:
-                    st.session_state.audio_features_cache = st.session_state.spotify_manager.get_audio_features_batch(track_ids)
-                except Exception as e:
-                    st.error(f"❌ Failed to fetch Spotify audio features: {str(e)}")
-                    st.error("This might be a permissions issue. Try:")
-                    st.info("1. Delete the `.spotify_cache` file in your project folder\n2. Go to https://developer.spotify.com/dashboard\n3. Edit your app settings\n4. Make sure Redirect URI is exactly: http://localhost:8501\n5. Save and re-authenticate")
-                    st.stop()
+                st.info(f"📊 Analyzing {len(st.session_state.user_library)} songs from your library...")
+
+                # Use fast heuristic estimation
+                with st.spinner("Generating feature estimates..."):
+                    st.session_state.audio_features_cache = batch_get_features(
+                        st.session_state.user_library,
+                        max_songs=None  # Process all songs
+                    )
+
+                st.success(f"✅ Analyzed {len(st.session_state.audio_features_cache)} songs!")
 
             # Calculate similarities
             st.info("🧮 Calculating similarity scores...")
@@ -272,6 +276,11 @@ if st.button(button_text, type="primary", disabled=not button_enabled):
             # Sort by similarity (lower score = more similar)
             song_scores.sort(key=lambda x: x['similarity_score'])
 
+            if not song_scores:
+                st.error("❌ No songs with features available for matching")
+                st.info("💡 Switch to Manual mode to pick a song directly")
+                st.stop()
+
             # Show top matches
             with st.expander("🎯 Top Matches", expanded=True):
                 for i, song in enumerate(song_scores[:5], 1):
@@ -279,7 +288,7 @@ if st.button(button_text, type="primary", disabled=not button_enabled):
                     st.write(f"{i}. **{song['display_name']}** - {score_pct:.0f}% match")
 
             # Select song probabilistically
-            selected_song = select_song_probabilistic(song_scores, top_n=top_n, distribution=distribution)
+            selected_song = select_song_probabilistic(song_scores, top_n=min(top_n, len(song_scores)), distribution=distribution)
 
             if not selected_song:
                 st.error("❌ No suitable songs found in your library")
@@ -341,4 +350,4 @@ if st.button(button_text, type="primary", disabled=not button_enabled):
 
 # Footer
 st.markdown("---")
-st.caption("💡 **Note**: Currently replaces entire audio track. Future versions will separate voiceover from music.")
+st.caption("💡 **Note**: Auto-match uses video audio analysis + fast heuristic song matching. Future: voice separation to preserve voiceover.")
