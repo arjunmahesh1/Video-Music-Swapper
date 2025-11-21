@@ -79,7 +79,7 @@ class SpotifyManager:
         """Fetch user's liked songs.
 
         Args:
-            limit: Maximum number of songs to fetch (default 50, max per request is 50)
+            limit: Maximum number of songs to fetch (Spotify API max is 50 per request, will paginate)
 
         Returns:
             List of dicts with keys: name, artist, uri, spotify_url
@@ -88,22 +88,17 @@ class SpotifyManager:
             raise Exception("Not authenticated. Call authenticate() first.")
 
         songs = []
-        results = self.sp.current_user_saved_tracks(limit=limit)
+        offset = 0
+        batch_size = 50  # Spotify's max per request
 
-        for item in results['items']:
-            track = item['track']
-            songs.append({
-                'name': track['name'],
-                'artist': track['artists'][0]['name'],
-                'uri': track['uri'],
-                'spotify_url': track['external_urls']['spotify'],
-                'display_name': f"{track['artists'][0]['name']} - {track['name']}",
-                'id': track['id']
-            })
+        while len(songs) < limit:
+            # Fetch next batch (max 50 at a time)
+            batch_limit = min(batch_size, limit - len(songs))
+            results = self.sp.current_user_saved_tracks(limit=batch_limit, offset=offset)
 
-        # Fetch more if available
-        while results['next'] and len(songs) < limit:
-            results = self.sp.next(results)
+            if not results['items']:
+                break  # No more songs
+
             for item in results['items']:
                 track = item['track']
                 songs.append({
@@ -114,6 +109,12 @@ class SpotifyManager:
                     'display_name': f"{track['artists'][0]['name']} - {track['name']}",
                     'id': track['id']
                 })
+
+            # Check if there are more songs available
+            if not results['next']:
+                break
+
+            offset += batch_size
 
         return songs
 
@@ -148,24 +149,55 @@ class SpotifyManager:
     def get_combined_library(self, liked_limit=200, top_limit=50):
         """Get combined set of liked songs and top tracks (deduplicated).
 
+        Top tracks are heavily weighted as "frequently listened" songs.
+
         Args:
-            liked_limit: Max liked songs to fetch (increased to 200 for better matching)
+            liked_limit: Max liked songs to fetch
             top_limit: Max top tracks to fetch
 
         Returns:
-            List of unique tracks
+            List of unique tracks with 'listening_score' (0-1, higher = more listened to)
         """
+        # Get top tracks from different time periods - these are songs you ACTUALLY listen to
+        top_recent = self.get_top_tracks(limit=top_limit, time_range='short_term')  # Last 4 weeks
+        top_medium = self.get_top_tracks(limit=top_limit, time_range='medium_term')  # Last 6 months
+
+        # Track URIs and assign listening scores
+        track_scores = {}
+
+        # Recent top tracks = highest priority
+        for i, song in enumerate(top_recent):
+            track_scores[song['uri']] = {
+                'song': song,
+                'listening_score': 1.0 - (i * 0.01)  # 1.0 for #1, decreasing slightly
+            }
+
+        # Medium-term top tracks = high priority (if not already in recent)
+        for i, song in enumerate(top_medium):
+            if song['uri'] not in track_scores:
+                track_scores[song['uri']] = {
+                    'song': song,
+                    'listening_score': 0.7 - (i * 0.005)
+                }
+
+        # Liked songs = lower priority (may not actually listen much)
         liked = self.get_liked_songs(limit=liked_limit)
-        top = self.get_top_tracks(limit=top_limit)
+        for i, song in enumerate(liked):
+            if song['uri'] not in track_scores:
+                track_scores[song['uri']] = {
+                    'song': song,
+                    'listening_score': 0.3 - (i * 0.001)
+                }
 
-        # Deduplicate by URI
-        seen_uris = set()
+        # Build final list with listening scores
         combined = []
+        for uri, data in track_scores.items():
+            song = data['song']
+            song['listening_score'] = data['listening_score']
+            combined.append(song)
 
-        for song in liked + top:
-            if song['uri'] not in seen_uris:
-                seen_uris.add(song['uri'])
-                combined.append(song)
+        # Sort by listening score (most listened first)
+        combined.sort(key=lambda x: x.get('listening_score', 0), reverse=True)
 
         return combined
 

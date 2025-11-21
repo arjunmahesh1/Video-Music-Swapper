@@ -266,7 +266,8 @@ if st.button(button_text, type="primary", disabled=not button_enabled):
             for song in st.session_state.user_library:
                 if song['id'] in st.session_state.audio_features_cache:
                     song_features = st.session_state.audio_features_cache[song['id']]
-                    similarity_score = calculate_similarity(video_features, song_features)
+                    listening_score = song.get('listening_score', 0.3)  # Default to low if not set
+                    similarity_score = calculate_similarity(video_features, song_features, listening_score)
                     song_scores.append({
                         **song,
                         'similarity_score': similarity_score,

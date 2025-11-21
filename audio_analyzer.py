@@ -69,14 +69,16 @@ def analyze_audio_features(audio_path):
     }
 
 
-def calculate_similarity(video_features, song_features):
+def calculate_similarity(video_features, song_features, listening_score=0.5):
     """Calculate similarity score between video audio and song.
 
-    Lower score = more similar
+    Lower score = more similar. Incorporates listening frequency to favor songs
+    you actually listen to.
 
     Args:
         video_features: Dict from analyze_audio_features()
-        song_features: Dict from Spotify API with keys: tempo, energy, valence, danceability
+        song_features: Dict with keys: tempo, energy, valence, danceability
+        listening_score: 0-1 score indicating how often you listen to this song (1.0 = most)
 
     Returns:
         Float similarity score (0 = identical, higher = more different)
@@ -85,8 +87,6 @@ def calculate_similarity(video_features, song_features):
     tempo_diff = abs(video_features['tempo'] - song_features.get('tempo', 120)) / 180.0
 
     # Energy difference (both should be 0-1 scale)
-    # video_features['energy'] from librosa is already 0-1
-    # Spotify energy is 0-1
     energy_diff = abs(video_features['energy'] - song_features.get('energy', 0.5))
 
     # For Spotify features we don't have from video, we use heuristics
@@ -97,15 +97,21 @@ def calculate_similarity(video_features, song_features):
     danceability_preference = video_features['energy']
     danceability_diff = abs(danceability_preference - song_features.get('danceability', 0.5))
 
-    # Weighted combination (tune these weights as needed)
-    similarity_score = (
+    # Base similarity from audio features
+    audio_similarity = (
         tempo_diff * 0.3 +        # Tempo is important
         energy_diff * 0.4 +        # Energy is very important
         valence_diff * 0.15 +      # Mood matters
         danceability_diff * 0.15   # Rhythm matters
     )
 
-    return similarity_score
+    # Apply listening score bonus - heavily favor songs you actually listen to
+    # Songs with high listening_score get a significant boost (lower similarity score)
+    listening_bonus = (1.0 - listening_score) * 0.4  # Up to 0.4 penalty for never-listened songs
+
+    final_score = audio_similarity + listening_bonus
+
+    return final_score
 
 
 def select_song_probabilistic(ranked_songs, top_n=5, distribution='balanced'):
