@@ -171,7 +171,7 @@ def batch_get_features(songs, max_songs=None):
     features_map = {}
     songs_to_process = songs[:max_songs] if max_songs else songs
 
-    print(f"\n📊 Estimating features for {len(songs_to_process)} songs...")
+    print(f"\nEstimating features for {len(songs_to_process)} songs...")
 
     for song in songs_to_process:
         features = estimate_features_from_metadata(
@@ -180,6 +180,6 @@ def batch_get_features(songs, max_songs=None):
         )
         features_map[song['id']] = features
 
-    print(f"✓ Generated feature estimates for {len(features_map)} songs\n")
+    print(f"Generated feature estimates for {len(features_map)} songs\n")
 
     return features_map

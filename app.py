@@ -10,6 +10,7 @@ from audio_analyzer import (
     select_song_probabilistic
 )
 from musicbrainz_features import batch_get_features
+from voice_separator import separate_and_remix, cleanup_demucs_output
 
 VIDEO_DIR = Path(__file__).with_name("video")
 AUDIO_DIR = Path(__file__).with_name("audio")
@@ -101,6 +102,24 @@ if is_auto_mode:
 else:
     distribution = None
     top_n = None
+
+st.sidebar.markdown("---")
+
+# Voice Preservation Option
+st.sidebar.subheader("🎤 Voice Preservation")
+preserve_voice = st.sidebar.checkbox(
+    "Keep original voiceover",
+    value=False,
+    help="AI extracts voice, replaces only the music, auto-ducks music during speech"
+)
+if preserve_voice:
+    st.sidebar.caption("AI separation + auto-ducking (music lowers when voice speaks)")
+    st.sidebar.caption("⏱️ Takes ~30-60 sec for AI processing")
+    voice_volume = st.sidebar.slider("Voice volume:", 0.5, 1.5, 1.0, 0.1)
+    music_volume = st.sidebar.slider("Music volume (ducks during voice):", 0.3, 1.0, 0.7, 0.1)
+else:
+    voice_volume = 1.0
+    music_volume = 0.8
 
 st.sidebar.markdown("---")
 
@@ -315,7 +334,41 @@ if st.button(button_text, type="primary", disabled=not button_enabled):
         # Output path
         out_path = tmp_path / f"{v_path.stem}__swapped{v_path.suffix}"
 
-        # Run FFmpeg
+        # Voice preservation mode
+        if preserve_voice:
+            st.info("🎤 Extracting voice from original audio...")
+
+            # Extract original audio from video
+            original_audio = tmp_path / "original_audio.wav"
+            extract_cmd = [
+                "ffmpeg", "-y",
+                "-i", str(v_path),
+                "-vn", "-acodec", "pcm_s16le",
+                "-ar", "44100", "-ac", "2",
+                str(original_audio)
+            ]
+            subprocess.run(extract_cmd, capture_output=True)
+
+            # Separate voice and mix with new music
+            try:
+                mixed_audio = tmp_path / "mixed_audio.wav"
+                with st.spinner("🎵 Separating voice and mixing with new music..."):
+                    separate_and_remix(
+                        original_audio,
+                        a_path,
+                        mixed_audio,
+                        vocals_volume=voice_volume,
+                        music_volume=music_volume
+                    )
+                st.success("✅ Voice preserved and mixed with new music!")
+
+                # Use mixed audio for final video
+                a_path = mixed_audio
+            except Exception as e:
+                st.error(f"❌ Voice separation failed: {str(e)}")
+                st.warning("⚠️ Falling back to full audio replacement...")
+
+        # Run FFmpeg to create final video
         st.info("🔧 Swapping audio track...")
         cmd = [
             "ffmpeg", "-y",
@@ -329,6 +382,13 @@ if st.button(button_text, type="primary", disabled=not button_enabled):
         ]
 
         result = subprocess.run(cmd, capture_output=True)
+
+        # Cleanup Demucs temp files
+        if preserve_voice:
+            try:
+                cleanup_demucs_output()
+            except:
+                pass
 
         if result.returncode:
             st.error("❌ FFmpeg failed")
@@ -351,4 +411,4 @@ if st.button(button_text, type="primary", disabled=not button_enabled):
 
 # Footer
 st.markdown("---")
-st.caption("💡 **Note**: Auto-match uses video audio analysis + fast heuristic song matching. Future: voice separation to preserve voiceover.")
+st.caption("💡 **Note**: Auto-match uses video audio analysis + smart song matching. Enable 'Keep original voiceover' to preserve speech while replacing music.")
