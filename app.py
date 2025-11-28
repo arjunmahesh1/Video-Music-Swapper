@@ -366,6 +366,9 @@ if st.button(button_text, type="primary", disabled=not button_enabled):
                 a_path = mixed_audio
             except Exception as e:
                 st.error(f"❌ Voice separation failed: {str(e)}")
+                # Show detailed error in expandable section
+                with st.expander("🔍 Full Error Details (click to expand)"):
+                    st.code(str(e), language=None)
                 st.warning("⚠️ Falling back to full audio replacement...")
 
         # Run FFmpeg to create final video
