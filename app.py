@@ -72,12 +72,28 @@ if not st.session_state.spotify_authenticated:
 else:
     st.sidebar.success(f"✅ Spotify Connected")
     st.sidebar.caption(f"{len(st.session_state.user_library)} songs in library")
-    if st.sidebar.button("🔄 Refresh Library"):
-        st.session_state.user_library = st.session_state.spotify_manager.get_combined_library(
-            liked_limit=200, top_limit=50
-        )
-        st.session_state.audio_features_cache = {}  # Clear cache
-        st.sidebar.success("Refreshed!")
+
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        if st.button("🔄 Refresh Library"):
+            st.session_state.user_library = st.session_state.spotify_manager.get_combined_library(
+                liked_limit=200, top_limit=50
+            )
+            st.session_state.audio_features_cache = {}  # Clear cache
+            st.success("Refreshed!")
+
+    with col2:
+        if st.button("🚪 Logout"):
+            # Delete Spotify cache to allow different account login
+            import os
+            if os.path.exists(".spotify_cache"):
+                os.remove(".spotify_cache")
+            st.session_state.spotify_authenticated = False
+            st.session_state.user_library = []
+            st.session_state.audio_features_cache = {}
+            # Create fresh SpotifyManager to clear old credentials from memory
+            st.session_state.spotify_manager = SpotifyManager()
+            st.rerun()
 
 st.sidebar.markdown("---")
 

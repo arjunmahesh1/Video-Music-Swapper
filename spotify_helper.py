@@ -52,7 +52,7 @@ class SpotifyManager:
             scope=self.scope,
             cache_path=".spotify_cache",
             open_browser=False,
-            show_dialog=False
+            show_dialog=True  # Force login page to appear (allow account switching)
         )
         return auth_manager.get_authorize_url()
 
@@ -66,7 +66,7 @@ class SpotifyManager:
                 scope=self.scope,
                 cache_path=".spotify_cache",
                 open_browser=False,
-                show_dialog=False
+                show_dialog=True  # Force login page to appear (allow account switching)
             )
             # Exchange code for token
             token_info = auth_manager.get_access_token(code, as_dict=True)

@@ -271,12 +271,13 @@ def detect_speech_segments(vocals_path):
 
     print(f"Merged into {len(speech_segments)} voiceover phrases")
 
-    # Add small padding to avoid cutting off beginnings/endings
-    # Extend each segment by 0.05s before and after
+    # Add minimal padding to avoid cutting off beginnings/endings
+    # Keep padding small to minimize residual music from Demucs separation
+    # Crossfades will handle smooth transitions
     padded_segments = []
     for start, end in speech_segments:
-        padded_start = max(0, start - 0.05)  # Don't go negative
-        padded_end = end + 0.05
+        padded_start = max(0, start - 0.02)  # Minimal 20ms padding before
+        padded_end = end + 0.02  # Minimal 20ms padding after
         padded_segments.append((padded_start, padded_end))
         print(f"  Phrase: {padded_start:.2f}s - {padded_end:.2f}s (duration: {padded_end - padded_start:.2f}s)")
 
@@ -510,14 +511,37 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
     clean_voiceover_path = Path(tempfile.gettempdir()) / "clean_voiceover.wav"
 
     # Build FFmpeg filter: keep audio ONLY during detected voiceover segments
+    # WITH crossfades to hide residual music and prevent clicks
     enable_conditions = []
     for start, end in speech_segments:
         enable_conditions.append(f"between(t,{start},{end})")
 
     enable_expression = "+".join(enable_conditions)
 
-    # Volume = 1 during voiceover, volume = 0 everywhere else
-    filter_cmd = f"volume=enable='{enable_expression}':volume=1,volume=enable='not({enable_expression})':volume=0"
+    # Add very short crossfades (30ms) at segment boundaries to:
+    # 1. Hide residual background music from Demucs separation
+    # 2. Prevent abrupt clicks/pops
+    # 3. Make transitions smooth
+    fade_duration = 0.03  # 30ms fade
+
+    fade_conditions = []
+    for start, end in speech_segments:
+        # Fade in at start, fade out at end
+        fade_conditions.append(
+            f"between(t,{start},{start + fade_duration})*((t-{start})/{fade_duration})"
+        )
+        fade_conditions.append(
+            f"between(t,{end - fade_duration},{end})*(({end}-t)/{fade_duration})"
+        )
+        # Full volume in the middle
+        fade_conditions.append(
+            f"between(t,{start + fade_duration},{end - fade_duration})*1"
+        )
+
+    fade_expression = "+".join(fade_conditions)
+
+    # Volume with crossfades during voiceover, 0 everywhere else
+    filter_cmd = f"volume=enable='not({enable_expression})':volume=0,volume={fade_expression}"
 
     cmd = [
         "ffmpeg", "-y",
