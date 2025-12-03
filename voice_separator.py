@@ -496,9 +496,32 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
     print("Step 1: Separating voiceover from background music...")
     separated = separate_audio(video_audio_path)
 
+    # Step 1.5: Preprocess vocals to remove residual music artifacts
+    print("Step 1.5: Cleaning vocals track (removing residual music)...")
+    cleaned_vocals_path = Path(tempfile.gettempdir()) / "cleaned_vocals.wav"
+
+    # Apply aggressive filtering to suppress residual music:
+    # 1. High-pass filter at 80Hz (removes low-frequency music/bass)
+    # 2. Noise gate to suppress quiet background music (threshold=-35dB)
+    # 3. De-esser to reduce harsh frequencies from music
+    preprocess_filter = (
+        "highpass=f=80,"  # Remove bass/low-frequency music
+        "agate=threshold=0.018:ratio=3:attack=5:release=50,"  # Suppress quiet sounds (-35dB)
+        "equalizer=f=8000:t=q:w=2:g=-3"  # Reduce harsh high frequencies
+    )
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(separated['vocals']),
+        "-af", preprocess_filter,
+        str(cleaned_vocals_path)
+    ]
+
+    subprocess.run(cmd, capture_output=True, text=True)
+
     # Step 2: Detect ONLY voiceover segments (not singing)
     print("Step 2: Detecting voiceover segments...")
-    speech_segments = detect_speech_segments(separated['vocals'])
+    speech_segments = detect_speech_segments(cleaned_vocals_path)
 
     if not speech_segments:
         print("No voiceover detected - using new music only")
@@ -518,11 +541,11 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
 
     enable_expression = "+".join(enable_conditions)
 
-    # Add very short crossfades (30ms) at segment boundaries to:
+    # Add crossfades (50ms) at segment boundaries to:
     # 1. Hide residual background music from Demucs separation
     # 2. Prevent abrupt clicks/pops
     # 3. Make transitions smooth
-    fade_duration = 0.03  # 30ms fade
+    fade_duration = 0.05  # 50ms fade (increased from 30ms)
 
     fade_conditions = []
     for start, end in speech_segments:
@@ -545,7 +568,7 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
 
     cmd = [
         "ffmpeg", "-y",
-        "-i", str(separated['vocals']),
+        "-i", str(cleaned_vocals_path),  # Use cleaned vocals, not raw separation
         "-af", filter_cmd,
         str(clean_voiceover_path)
     ]
