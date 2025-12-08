@@ -529,47 +529,19 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         shutil.copy(new_music_path, output_path)
         return output_path
 
-    # Step 3: Create a vocals track with ONLY voiceover (singing completely removed)
-    print("Step 3: Extracting clean voiceover (removing all singing)...")
+    # Step 3: Extract voiceover using detected segments
+    print("Step 3: Extracting voiceover segments...")
     clean_voiceover_path = Path(tempfile.gettempdir()) / "clean_voiceover.wav"
 
-    # Build FFmpeg filter: keep audio ONLY during detected voiceover segments
-    # WITH crossfades to hide residual music and prevent clicks
-    enable_conditions = []
-    for start, end in speech_segments:
-        enable_conditions.append(f"between(t,{start},{end})")
+    # Build FFmpeg filter: keep ONLY detected speech segments
+    enable_conds = [f"between(t,{s},{e})" for s, e in speech_segments]
+    enable_expr = "+".join(enable_conds)
 
-    enable_expression = "+".join(enable_conditions)
-
-    # Add crossfades (50ms) at segment boundaries to:
-    # 1. Hide residual background music from Demucs separation
-    # 2. Prevent abrupt clicks/pops
-    # 3. Make transitions smooth
-    fade_duration = 0.05  # 50ms fade (increased from 30ms)
-
-    fade_conditions = []
-    for start, end in speech_segments:
-        # Fade in at start, fade out at end
-        fade_conditions.append(
-            f"between(t,{start},{start + fade_duration})*((t-{start})/{fade_duration})"
-        )
-        fade_conditions.append(
-            f"between(t,{end - fade_duration},{end})*(({end}-t)/{fade_duration})"
-        )
-        # Full volume in the middle
-        fade_conditions.append(
-            f"between(t,{start + fade_duration},{end - fade_duration})*1"
-        )
-
-    fade_expression = "+".join(fade_conditions)
-
-    # Volume with crossfades during voiceover, 0 everywhere else
-    filter_cmd = f"volume=enable='not({enable_expression})':volume=0,volume={fade_expression}"
-
+    # Simple volume gating: volume=1 during speech, volume=0 elsewhere
     cmd = [
         "ffmpeg", "-y",
-        "-i", str(cleaned_vocals_path),  # Use cleaned vocals, not raw separation
-        "-af", filter_cmd,
+        "-i", str(cleaned_vocals_path),
+        "-af", f"volume=enable='{enable_expr}':volume=1,volume=enable='not({enable_expr})':volume=0",
         str(clean_voiceover_path)
     ]
 

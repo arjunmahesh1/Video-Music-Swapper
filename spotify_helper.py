@@ -101,9 +101,12 @@ class SpotifyManager:
 
             for item in results['items']:
                 track = item['track']
+                artist_id = track['artists'][0]['id']
+
                 songs.append({
                     'name': track['name'],
                     'artist': track['artists'][0]['name'],
+                    'artist_id': artist_id,
                     'uri': track['uri'],
                     'spotify_url': track['external_urls']['spotify'],
                     'display_name': f"{track['artists'][0]['name']} - {track['name']}",
@@ -135,9 +138,12 @@ class SpotifyManager:
         results = self.sp.current_user_top_tracks(limit=limit, time_range=time_range)
 
         for track in results['items']:
+            artist_id = track['artists'][0]['id']
+
             songs.append({
                 'name': track['name'],
                 'artist': track['artists'][0]['name'],
+                'artist_id': artist_id,
                 'uri': track['uri'],
                 'spotify_url': track['external_urls']['spotify'],
                 'display_name': f"{track['artists'][0]['name']} - {track['name']}",
@@ -145,6 +151,37 @@ class SpotifyManager:
             })
 
         return songs
+
+    def get_artist_genres(self, artist_ids):
+        """Fetch genres for multiple artists at once.
+
+        Args:
+            artist_ids: List of Spotify artist IDs
+
+        Returns:
+            Dict mapping artist_id -> list of genres
+        """
+        if not self.sp:
+            raise Exception("Not authenticated. Call authenticate() first.")
+
+        genres_map = {}
+
+        # Spotify allows max 50 artists per request
+        for i in range(0, len(artist_ids), 50):
+            batch = artist_ids[i:i+50]
+            try:
+                artists = self.sp.artists(batch)
+                for artist in artists['artists']:
+                    if artist:  # Sometimes can be None
+                        genres_map[artist['id']] = artist.get('genres', [])
+            except Exception as e:
+                print(f"Warning: Failed to fetch genres for batch: {e}")
+                # Fill with empty genres for failed artists
+                for artist_id in batch:
+                    if artist_id not in genres_map:
+                        genres_map[artist_id] = []
+
+        return genres_map
 
     def get_combined_library(self, liked_limit=200, top_limit=50):
         """Get combined set of liked songs and top tracks (deduplicated).
