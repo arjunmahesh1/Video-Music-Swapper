@@ -227,24 +227,38 @@ def infer_video_genres(video_features):
     is_harmonic = video_features.get('is_harmonic', False)
     chroma_mean = video_features.get('chroma_mean', 0)
 
-    # Rock/Metal - high energy, high tempo, bright timbre
-    if energy > 0.7 and tempo > 120 and video_features.get('is_bright', False):
+    # Hip-hop/Rap - PRIORITIZE THIS (check first before other genres)
+    # Very percussive, medium-high tempo, lower harmonic content than melodic genres
+    # Spectral contrast helps distinguish rap from rock
+    if percussiveness > 0.1 and 115 <= tempo <= 155 and energy > 0.6:
+        # Strong indicator: high percussiveness with lower harmonic content
+        if not is_harmonic or chroma_mean < 0.4:
+            genres.append('rap')
+            genres.append('hip hop')
+            # Skip other genre checks if this is clearly rap
+            return genres
+
+    # Trap/Modern Hip-hop - specific subgenre with distinct characteristics
+    if 130 <= tempo <= 170 and percussiveness > 0.12 and energy > 0.7:
+        genres.append('trap')
+        genres.append('rap')
+        genres.append('hip hop')
+        return genres
+
+    # Rock/Metal - high energy, high tempo, bright timbre, harmonic
+    if energy > 0.7 and tempo > 120 and video_features.get('is_bright', False) and is_harmonic:
         genres.append('rock')
         if energy > 0.85:
             genres.append('metal')
 
     # Electronic/EDM - very high energy, steady tempo around 128, percussive
-    if energy > 0.75 and 120 <= tempo <= 140 and percussiveness > 0.08:
+    # Higher harmonic content than rap, more consistent tempo
+    if energy > 0.75 and 120 <= tempo <= 140 and percussiveness > 0.08 and is_harmonic:
         genres.append('electronic')
         genres.append('edm')
 
-    # Hip-hop/Rap - medium-high tempo (120-150), high energy, very percussive
-    if 120 <= tempo <= 150 and energy > 0.65 and percussiveness > 0.1:
-        genres.append('hip hop')
-        genres.append('rap')
-
     # Pop - medium energy and tempo, harmonic
-    if 0.5 <= energy <= 0.75 and 100 <= tempo <= 130 and is_harmonic:
+    if 0.5 <= energy <= 0.75 and 100 <= tempo <= 130 and is_harmonic and chroma_mean > 0.35:
         genres.append('pop')
 
     # Indie/Alternative - medium energy, harmonic content

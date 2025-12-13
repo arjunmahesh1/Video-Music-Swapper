@@ -66,7 +66,7 @@ if auth_code and not st.session_state.spotify_authenticated:
                 st.session_state.spotify_authenticated = True
                 with st.spinner("Loading your music library..."):
                     st.session_state.user_library = st.session_state.spotify_manager.get_combined_library(
-                        liked_limit=200, top_limit=50
+                        liked_limit=500, top_limit=50
                     )
                 st.query_params.clear()
                 st.rerun()

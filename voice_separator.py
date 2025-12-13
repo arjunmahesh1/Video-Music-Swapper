@@ -199,6 +199,51 @@ def is_singing_not_speech(audio_segment, sr=16000):
         return False  # If analysis fails, assume it's speech (conservative)
 
 
+def is_likely_music_lyrics(text):
+    """Check if transcribed text is likely song lyrics rather than speech.
+
+    Returns True if text appears to be music/singing, False if likely speech.
+    """
+    text_lower = text.lower().strip()
+
+    # Common music patterns - repeated syllables, ad-libs, vocalizations
+    music_patterns = [
+        # Trap/Hip-hop ad-libs and vocalizations
+        'yeah', 'ayy', 'uh', 'oh', 'ooh', 'ahh', 'whoa', 'woah',
+        'skrrt', 'brr', 'grr', 'yuh', 'huh', 'nah', 'yah',
+        'la la', 'na na', 'da da', 'ba ba', 'sha la',
+        # Common lyric fragments
+        'fein', 'shawty', 'baby', 'bae', 'shorty',
+        # Repetitive patterns
+        'yeah yeah', 'no no', 'go go', 'hey hey',
+    ]
+
+    # Check for exact matches to common ad-libs
+    if text_lower in music_patterns:
+        return True
+
+    # Check for very short utterances (likely ad-libs)
+    if len(text_lower) <= 3 and text_lower in ['uh', 'oh', 'ah', 'mm', 'hm', 'eh']:
+        return True
+
+    # Check for repetitive syllables (e.g., "yeah yeah yeah")
+    words = text_lower.split()
+    if len(words) >= 2:
+        # If 70%+ of words are the same, likely music
+        word_counts = {}
+        for word in words:
+            word_counts[word] = word_counts.get(word, 0) + 1
+        max_repeat = max(word_counts.values())
+        if max_repeat / len(words) > 0.7:
+            return True
+
+    # Check for all-caps screaming/singing patterns (FEIN!!!)
+    if text.isupper() and len(text) >= 3:
+        return True
+
+    return False
+
+
 def detect_speech_segments(vocals_path):
     """Detect when speech is happening using Whisper speech recognition.
 
@@ -233,15 +278,31 @@ def detect_speech_segments(vocals_path):
     # Extract word-level timestamps from Whisper result
     # Whisper groups words into segments, we need to extract all word timestamps
     all_words = []
+    filtered_count = 0
+
     for segment in result.get('segments', []):
+        segment_text = segment.get('text', '').strip()
+
+        # Filter out entire segments that are likely music
+        if is_likely_music_lyrics(segment_text):
+            filtered_count += len(segment.get('words', []))
+            print(f"  Filtered music: \"{segment_text}\"")
+            continue
+
+        # Also filter individual words
         for word in segment.get('words', []):
-            all_words.append(word)
+            word_text = word.get('word', '').strip()
+            if not is_likely_music_lyrics(word_text):
+                all_words.append(word)
+            else:
+                filtered_count += 1
+                print(f"  Filtered word: \"{word_text}\"")
 
     if not all_words:
-        print("Warning: No words detected in transcription")
+        print("Warning: No speech detected (all words filtered as music)")
         return []
 
-    print(f"Detected {len(all_words)} words with timestamps")
+    print(f"Detected {len(all_words)} words with timestamps ({filtered_count} filtered as music)")
 
     # Merge nearby words into phrases (words within 0.3s are part of same phrase)
     speech_segments = []
