@@ -278,31 +278,53 @@ def detect_speech_segments(vocals_path):
     # Extract word-level timestamps from Whisper result
     # Whisper groups words into segments, we need to extract all word timestamps
     all_words = []
-    filtered_count = 0
+    filtered_text_count = 0
+    filtered_acoustic_count = 0
+
+    # Load the audio once for acoustic analysis
+    print("Loading audio for acoustic analysis...")
+    try:
+        audio, sr = librosa.load(str(vocals_path), sr=16000)
+    except Exception as e:
+        print(f"Warning: Could not load audio for acoustic analysis: {e}")
+        audio = None
 
     for segment in result.get('segments', []):
         segment_text = segment.get('text', '').strip()
 
-        # Filter out entire segments that are likely music
+        # Filter 1: Text-based filtering (catches obvious ad-libs)
         if is_likely_music_lyrics(segment_text):
-            filtered_count += len(segment.get('words', []))
-            print(f"  Filtered music: \"{segment_text}\"")
+            filtered_text_count += len(segment.get('words', []))
+            print(f"  Filtered (text): \"{segment_text}\"")
             continue
 
-        # Also filter individual words
+        # Filter 2: Acoustic analysis (catches singing that Whisper transcribed)
+        # Extract audio for this segment and analyze
+        if audio is not None and 'start' in segment and 'end' in segment:
+            seg_start = segment['start']
+            seg_end = segment['end']
+
+            # Extract segment audio
+            start_sample = int(seg_start * sr)
+            end_sample = int(seg_end * sr)
+            segment_audio = audio[start_sample:end_sample]
+
+            # Check if it's singing
+            if len(segment_audio) > sr * 0.1:  # Only analyze if > 0.1s
+                if is_singing_not_speech(segment_audio, sr):
+                    filtered_acoustic_count += len(segment.get('words', []))
+                    print(f"  Filtered (acoustic): \"{segment_text}\"")
+                    continue
+
+        # Segment passed both filters - keep all words
         for word in segment.get('words', []):
-            word_text = word.get('word', '').strip()
-            if not is_likely_music_lyrics(word_text):
-                all_words.append(word)
-            else:
-                filtered_count += 1
-                print(f"  Filtered word: \"{word_text}\"")
+            all_words.append(word)
 
     if not all_words:
-        print("Warning: No speech detected (all words filtered as music)")
+        print("Warning: No speech detected (all segments filtered as music)")
         return []
 
-    print(f"Detected {len(all_words)} words with timestamps ({filtered_count} filtered as music)")
+    print(f"Detected {len(all_words)} words with timestamps ({filtered_text_count} filtered by text, {filtered_acoustic_count} filtered by acoustic analysis)")
 
     # Merge nearby words into phrases (words within 0.3s are part of same phrase)
     speech_segments = []
