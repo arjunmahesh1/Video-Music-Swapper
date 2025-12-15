@@ -96,6 +96,15 @@ for i, (step_num, label) in enumerate(progress_labels.items()):
 
 st.markdown("---")
 
+# Callback function for "Process Another Video" button
+def reset_to_upload():
+    """Reset session state to go back to upload step."""
+    st.session_state.step = 2
+    st.session_state.video_file = None
+    st.session_state.video_name = None
+    st.session_state.selected_song = None
+    st.session_state.mode = None
+
 # STEP 1: Connect Spotify
 if st.session_state.step == 1:
     st.subheader("Step 1: Connect Spotify")
@@ -375,12 +384,7 @@ elif st.session_state.step == 4:
                         with st.expander("Show Original Video"):
                             st.video(st.session_state.video_file)
 
-                        if st.button("Process Another Video"):
-                            st.session_state.step = 2
-                            st.session_state.video_file = None
-                            st.session_state.video_name = None
-                            st.session_state.selected_song = None
-                            st.rerun()
+                        st.button("Process Another Video", key="auto_process_another", on_click=reset_to_upload)
 
     # Manual Mode
     else:
@@ -512,11 +516,7 @@ elif st.session_state.step == 4:
                             with st.expander("Show Original Video"):
                                 st.video(st.session_state.video_file)
 
-                            if st.button("Process Another Video"):
-                                st.session_state.step = 2
-                                st.session_state.video_file = None
-                                st.session_state.video_name = None
-                                st.rerun()
+                            st.button("Process Another Video", key="manual_process_another", on_click=reset_to_upload)
 
         if st.button("Back"):
             st.session_state.step = 3

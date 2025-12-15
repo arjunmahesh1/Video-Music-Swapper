@@ -142,20 +142,20 @@ def separate_audio(audio_path, output_dir=None, model=None):
     raise Exception(f"Demucs separation failed with all models. Last error: {last_error}")
 
 
-def is_singing_not_speech(audio_segment, sr=16000):
+def is_singing_not_speech(audio_segment, sr=16000, segment_duration=None):
     """Analyze if an audio segment is singing rather than speech.
 
-    Singing has:
-    - More harmonic/tonal content (cleaner spectrum)
-    - Higher spectral centroid (brighter sound)
-    - More sustained pitch
+    Uses adaptive thresholds:
+    - Short segments (< 2s): More aggressive filtering (2/3 indicators) to catch bursts
+    - Long segments (>= 2s): Conservative filtering (3/3) to preserve voiceover
 
-    Speech has:
-    - Noisier spectrum
-    - More irregular patterns
-    - Lower spectral centroid
+    Args:
+        audio_segment: Audio data (numpy array or torch tensor)
+        sr: Sample rate
+        segment_duration: Duration in seconds (if None, calculated from audio length)
 
-    Returns True if it's likely singing, False if it's likely speech.
+    Returns:
+        True if likely singing, False if likely speech
     """
     try:
         # Convert to numpy if it's a torch tensor
@@ -166,6 +166,10 @@ def is_singing_not_speech(audio_segment, sr=16000):
 
         # Ensure float32
         audio_np = audio_np.astype(np.float32)
+
+        # Calculate duration if not provided
+        if segment_duration is None:
+            segment_duration = len(audio_np) / sr
 
         # Calculate spectral features
         # 1. Spectral centroid - singing is usually brighter (higher frequency content)
@@ -180,19 +184,32 @@ def is_singing_not_speech(audio_segment, sr=16000):
         spectral_flatness = librosa.feature.spectral_flatness(y=audio_np)[0]
         mean_flatness = np.mean(spectral_flatness)
 
-        # Decision logic:
-        # Singing indicators (if any 2 are true, it's probably singing):
-        is_high_centroid = mean_centroid > 2000  # Bright/musical
-        is_low_zcr = mean_zcr < 0.08  # Sustained tones
-        is_low_flatness = mean_flatness < 0.05  # Tonal/harmonic
+        # Decision thresholds based on segment length
+        # Short segments: likely music burps, use stricter thresholds
+        # Long segments: likely voiceover, use conservative thresholds
+        is_short_segment = segment_duration < 2.0
+
+        if is_short_segment:
+            # For short bursts: slightly relaxed thresholds, need 2/3
+            is_high_centroid = mean_centroid > 2400  # Bright
+            is_low_zcr = mean_zcr < 0.08  # Sustained
+            is_low_flatness = mean_flatness < 0.025  # Tonal
+            required_score = 2  # Need 2 out of 3
+        else:
+            # For longer segments: very strict thresholds, need 3/3
+            is_high_centroid = mean_centroid > 2800  # Very bright
+            is_low_zcr = mean_zcr < 0.06  # Very sustained
+            is_low_flatness = mean_flatness < 0.015  # Very tonal
+            required_score = 3  # Need all 3
 
         singing_score = sum([is_high_centroid, is_low_zcr, is_low_flatness])
 
         # Debug output
-        print(f"  Spectral analysis: centroid={mean_centroid:.0f}Hz, zcr={mean_zcr:.3f}, flatness={mean_flatness:.3f}, singing_score={singing_score}/3")
+        segment_type = "short burst" if is_short_segment else "long segment"
+        print(f"  Spectral analysis ({segment_type}, {segment_duration:.1f}s): centroid={mean_centroid:.0f}Hz, zcr={mean_zcr:.3f}, flatness={mean_flatness:.3f}, score={singing_score}/{required_score}")
 
-        # If 2 or more singing indicators, classify as singing
-        return singing_score >= 2
+        # Filter if score meets threshold
+        return singing_score >= required_score
 
     except Exception as e:
         print(f"  Warning: Spectral analysis failed: {e}, assuming speech")
@@ -303,15 +320,16 @@ def detect_speech_segments(vocals_path):
         if audio is not None and 'start' in segment and 'end' in segment:
             seg_start = segment['start']
             seg_end = segment['end']
+            seg_duration = seg_end - seg_start
 
             # Extract segment audio
             start_sample = int(seg_start * sr)
             end_sample = int(seg_end * sr)
             segment_audio = audio[start_sample:end_sample]
 
-            # Check if it's singing
+            # Check if it's singing (pass duration for adaptive thresholding)
             if len(segment_audio) > sr * 0.1:  # Only analyze if > 0.1s
-                if is_singing_not_speech(segment_audio, sr):
+                if is_singing_not_speech(segment_audio, sr, segment_duration=seg_duration):
                     filtered_acoustic_count += len(segment.get('words', []))
                     print(f"  Filtered (acoustic): \"{segment_text}\"")
                     continue

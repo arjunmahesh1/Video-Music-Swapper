@@ -142,7 +142,8 @@ def calculate_genre_similarity(video_genres, song_genres):
                 'indie': ['indie', 'alternative', 'bedroom pop'],
                 'r&b': ['r&b', 'soul', 'rnb', 'neo soul'],
                 'jazz': ['jazz', 'blues', 'swing'],
-                'classical': ['classical', 'orchestra', 'symphonic'],
+                'classical': ['classical', 'orchestra', 'symphonic', 'orchestral', 'cinematic'],
+                'acoustic': ['acoustic', 'piano', 'ballad', 'singer-songwriter', 'folk'],
                 'country': ['country', 'folk', 'americana'],
                 'latin': ['latin', 'reggaeton', 'salsa', 'bachata']
             }
@@ -226,24 +227,38 @@ def infer_video_genres(video_features):
     percussiveness = video_features.get('percussiveness', 0)
     is_harmonic = video_features.get('is_harmonic', False)
     chroma_mean = video_features.get('chroma_mean', 0)
+    brightness = video_features.get('brightness', 0)
+
+    # DEBUG: Print actual features being analyzed
+    print(f"\nGenre Detection Debug:")
+    print(f"  Tempo: {tempo:.1f} BPM")
+    print(f"  Energy: {energy:.2f}")
+    print(f"  Percussiveness: {percussiveness:.3f}")
+    print(f"  Chroma (harmonic): {chroma_mean:.3f}")
+    print(f"  Is harmonic: {is_harmonic}")
+    print(f"  Brightness: {brightness:.0f} Hz")
 
     # Hip-hop/Rap - PRIORITIZE THIS (check first before other genres)
-    # Very percussive, medium-high tempo, lower harmonic content than melodic genres
-    # Spectral contrast helps distinguish rap from rock
-    if percussiveness > 0.1 and 115 <= tempo <= 155 and energy > 0.6:
+    # Very percussive, WIDER tempo range (rap can be slower!), lower harmonic content
+    # EXPANDED: 85-160 BPM to catch slower trap/rap like FEIN
+    if percussiveness > 0.1 and 85 <= tempo <= 160 and energy > 0.5:
         # Strong indicator: high percussiveness with lower harmonic content
         if not is_harmonic or chroma_mean < 0.4:
+            print(f"  → Matched: Rap/Hip-hop (percussive + low harmonic)")
             genres.append('rap')
             genres.append('hip hop')
             # Skip other genre checks if this is clearly rap
             return genres
 
     # Trap/Modern Hip-hop - specific subgenre with distinct characteristics
-    if 130 <= tempo <= 170 and percussiveness > 0.12 and energy > 0.7:
-        genres.append('trap')
-        genres.append('rap')
-        genres.append('hip hop')
-        return genres
+    # EXPANDED: 70-170 to catch half-time trap
+    if 70 <= tempo <= 170 and percussiveness > 0.11 and energy > 0.6:
+        if not is_harmonic or chroma_mean < 0.35:
+            print(f"  → Matched: Trap (very percussive + low harmonic)")
+            genres.append('trap')
+            genres.append('rap')
+            genres.append('hip hop')
+            return genres
 
     # Rock/Metal - high energy, high tempo, bright timbre, harmonic
     if energy > 0.7 and tempo > 120 and video_features.get('is_bright', False) and is_harmonic:
@@ -257,11 +272,31 @@ def infer_video_genres(video_features):
         genres.append('electronic')
         genres.append('edm')
 
+    # Piano/Acoustic - MUST be VERY harmonic and VERY low percussiveness
+    # Stricter to avoid catching rap/trap that happens to be slow
+    # Real piano: very harmonic (> 0.4), very low percussiveness (< 0.07)
+    if tempo < 110 and is_harmonic and chroma_mean > 0.4 and percussiveness < 0.07:
+        print(f"  → Matched: Piano/Acoustic (slow + very harmonic + very low percussive)")
+        genres.append('piano')
+        genres.append('acoustic')
+        if tempo < 90:
+            genres.append('ballad')
+        # Early return - don't add conflicting genres
+        return genres
+
+    # Orchestral/Cinematic - wide range, very harmonic, slow-medium tempo
+    if is_harmonic and chroma_mean > 0.4 and tempo < 120 and percussiveness < 0.06:
+        genres.append('orchestral')
+        genres.append('cinematic')
+        genres.append('classical')
+        return genres
+
     # Pop - medium energy and tempo, harmonic
     if 0.5 <= energy <= 0.75 and 100 <= tempo <= 130 and is_harmonic and chroma_mean > 0.35:
         genres.append('pop')
 
     # Indie/Alternative - medium energy, harmonic content
+    # Only match if not already caught by more specific genres
     if 0.4 <= energy <= 0.7 and is_harmonic and chroma_mean > 0.3:
         genres.append('indie')
         genres.append('alternative')
@@ -275,8 +310,10 @@ def infer_video_genres(video_features):
     # Default to general categories if nothing matched
     if not genres:
         if energy > 0.6:
+            print(f"  → Matched: Energetic (fallback - high energy)")
             genres.append('energetic')
         else:
+            print(f"  → Matched: Mellow (fallback - low energy)")
             genres.append('mellow')
 
     return genres
