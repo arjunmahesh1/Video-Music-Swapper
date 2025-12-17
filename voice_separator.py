@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import torchaudio
 import librosa
-import whisper
+from faster_whisper import WhisperModel
 
 
 # Models to try in order of memory efficiency (quantized = smaller)
@@ -46,22 +46,29 @@ def separate_audio(audio_path, output_dir=None, model=None):
     # Use the same Python executable that's running this script
     python_exe = sys.executable
 
-    # Set environment variables to reduce memory usage
+    # Set environment variables
     env = os.environ.copy()
-    env["PYTORCH_NO_CUDA_MEMORY_CACHING"] = "1"  # Reduce GPU memory caching
-    env["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU-only mode (avoids GPU memory issues)
+
+    # Check if CUDA GPU is available
+    if torch.cuda.is_available():
+        print(f"GPU detected: {torch.cuda.get_device_name(0)} - using GPU acceleration")
+        env["PYTORCH_NO_CUDA_MEMORY_CACHING"] = "1"  # Reduce GPU memory caching
+        # Don't set CUDA_VISIBLE_DEVICES - let it use GPU
+    else:
+        print("No GPU detected - using CPU (slower)")
+        env["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU-only mode
 
     # If specific model requested, only try that one
     models_to_try = [(model, model)] if model else DEMUCS_MODELS
 
     last_error = None
     for model_name, model_id in models_to_try:
-        print(f"Trying Demucs model: {model_name} (lower memory)...")
+        print(f"Trying Demucs model: {model_name}...")
         print(f"Using Python: {python_exe}")
 
-        # Build command - use smallest segment size to minimize memory
-        # Smaller segments = less RAM needed, but slower processing
-        segment_size = "5"  # Very small chunks to reduce peak memory
+        # Build command - segment size balances memory vs speed
+        # Larger segments = faster but more RAM (10 is good for CPU)
+        segment_size = "10"  # Balanced for CPU performance
 
         cmd = [
             python_exe, "-m", "demucs",
@@ -190,17 +197,20 @@ def is_singing_not_speech(audio_segment, sr=16000, segment_duration=None):
         is_short_segment = segment_duration < 2.0
 
         if is_short_segment:
-            # For short bursts: slightly relaxed thresholds, need 2/3
-            is_high_centroid = mean_centroid > 2400  # Bright
-            is_low_zcr = mean_zcr < 0.08  # Sustained
-            is_low_flatness = mean_flatness < 0.025  # Tonal
+            # For short bursts: aggressive filtering to catch music burps, need 2/3
+            is_high_centroid = mean_centroid > 2400  # Very bright
+            is_low_zcr = mean_zcr < 0.08  # Very sustained
+            is_low_flatness = mean_flatness < 0.025  # Very tonal
             required_score = 2  # Need 2 out of 3
         else:
-            # For longer segments: very strict thresholds, need 3/3
-            is_high_centroid = mean_centroid > 2800  # Very bright
-            is_low_zcr = mean_zcr < 0.06  # Very sustained
-            is_low_flatness = mean_flatness < 0.015  # Very tonal
-            required_score = 3  # Need all 3
+            # For longer segments: MUST be very conservative to preserve narration
+            # Voiceover narration: centroid ~1500-2000, zcr ~0.13-0.16, flatness ~0.02-0.04
+            # Singing: centroid >2500, zcr <0.10, flatness <0.02
+            # Require ALL 3 indicators to be very sure it's singing before filtering
+            is_high_centroid = mean_centroid > 2500  # Significantly brighter than speech
+            is_low_zcr = mean_zcr < 0.10  # More sustained than speech
+            is_low_flatness = mean_flatness < 0.020  # More tonal than speech
+            required_score = 3  # Need ALL 3 to filter (very conservative)
 
         singing_score = sum([is_high_centroid, is_low_zcr, is_low_flatness])
 
@@ -221,6 +231,8 @@ def is_likely_music_lyrics(text):
 
     Returns True if text appears to be music/singing, False if likely speech.
     """
+    import re
+
     text_lower = text.lower().strip()
 
     # Common music patterns - repeated syllables, ad-libs, vocalizations
@@ -243,8 +255,11 @@ def is_likely_music_lyrics(text):
     if len(text_lower) <= 3 and text_lower in ['uh', 'oh', 'ah', 'mm', 'hm', 'eh']:
         return True
 
-    # Check for repetitive syllables (e.g., "yeah yeah yeah")
-    words = text_lower.split()
+    # Remove punctuation and split into words for pattern analysis
+    # This handles "rush," vs "rush" and "lot," vs "lot"
+    text_clean = re.sub(r'[^\w\s]', '', text_lower)  # Remove all punctuation
+    words = text_clean.split()
+
     if len(words) >= 2:
         # If 70%+ of words are the same, likely music
         word_counts = {}
@@ -252,6 +267,40 @@ def is_likely_music_lyrics(text):
             word_counts[word] = word_counts.get(word, 0) + 1
         max_repeat = max(word_counts.values())
         if max_repeat / len(words) > 0.7:
+            return True
+
+        # Check for immediate word repetition (e.g., "I rush, I rush" or "rush rush")
+        # Now works even with punctuation because we cleaned it
+        for i in range(len(words) - 1):
+            # Skip common filler words
+            if words[i] not in ['the', 'a', 'an', 'and', 'or', 'but', 'to', 'of', 'in', 'i', 'you', 'we']:
+                if words[i] == words[i + 1]:
+                    print(f"    → Detected immediate repetition: '{words[i]} {words[i+1]}'")
+                    return True
+
+        # Check for A-B-A patterns (e.g., "a lot, a dream, a lot")
+        # Very common in song lyrics, rare in speech
+        if len(words) >= 5:
+            for i in range(len(words) - 4):
+                # Check if word at position i appears again within next 4 words
+                # Excluding very common words that legitimately repeat
+                if words[i] not in ['the', 'a', 'an', 'and', 'or', 'but', 'to', 'of', 'in', 'is', 'it', 'i', 'you', 'we', 'my', 'your']:
+                    for j in range(i + 2, min(i + 5, len(words))):
+                        if words[i] == words[j]:
+                            print(f"    → Detected A-B-A pattern: word '{words[i]}' at positions {i} and {j}")
+                            return True
+
+    # Check for lyrical/poetic phrases (not conversational)
+    # Add more Sweet Disposition specific patterns
+    lyrical_phrases = [
+        'wanna dream', 'on the momentum', 'dream for life',
+        'in my heart', 'in my soul', 'feel the beat',
+        'all night long', 'all day long', 'tonight',
+        'let\'s go', 'lets go',  # Common in songs
+    ]
+    for phrase in lyrical_phrases:
+        if phrase in text_lower:
+            print(f"    → Detected lyrical phrase: '{phrase}'")
             return True
 
     # Check for all-caps screaming/singing patterns (FEIN!!!)
@@ -269,26 +318,31 @@ def detect_speech_segments(vocals_path):
 
     Returns list of (start_time, end_time) tuples in seconds.
     """
-    print("Loading Whisper model for voiceover detection...")
+    print("Loading faster-whisper model for voiceover detection (4x faster)...")
 
     try:
-        # Load Whisper model (base model is good balance of speed/accuracy)
-        # First run downloads ~150MB model
-        model = whisper.load_model("base")
+        # Load faster-whisper model with CPU optimization
+        # int8 quantization for speed without accuracy loss
+        model = WhisperModel("base", device="cpu", compute_type="int8")
         print("Transcribing audio to detect voiceover...")
 
         # Transcribe with word-level timestamps
-        result = model.transcribe(
+        # Returns (segments, info) tuple
+        segments, _ = model.transcribe(
             str(vocals_path),
             word_timestamps=True,  # Get exact timing for each word
             language="en",  # Assume English (adjust if needed)
-            task="transcribe"
         )
 
-        print(f"Detected speech: \"{result['text'].strip()}\"")
+        # Convert segments iterator to list for processing
+        segments_list = list(segments)
+
+        # Build full transcription text for display
+        full_text = " ".join([seg.text for seg in segments_list])
+        print(f"Detected speech: \"{full_text.strip()}\"")
 
     except Exception as e:
-        print(f"Warning: Whisper failed: {e}")
+        print(f"Warning: faster-whisper failed: {e}")
         print("Falling back to VAD detection...")
         return _detect_speech_segments_fallback_vad(vocals_path)
 
@@ -298,6 +352,9 @@ def detect_speech_segments(vocals_path):
     filtered_text_count = 0
     filtered_acoustic_count = 0
 
+    # Count total words for filtering statistics
+    total_words = sum(len(seg.words) for seg in segments_list)
+
     # Load the audio once for acoustic analysis
     print("Loading audio for acoustic analysis...")
     try:
@@ -306,20 +363,20 @@ def detect_speech_segments(vocals_path):
         print(f"Warning: Could not load audio for acoustic analysis: {e}")
         audio = None
 
-    for segment in result.get('segments', []):
-        segment_text = segment.get('text', '').strip()
+    for segment in segments_list:
+        segment_text = segment.text.strip()
 
         # Filter 1: Text-based filtering (catches obvious ad-libs)
         if is_likely_music_lyrics(segment_text):
-            filtered_text_count += len(segment.get('words', []))
+            filtered_text_count += len(segment.words)
             print(f"  Filtered (text): \"{segment_text}\"")
             continue
 
         # Filter 2: Acoustic analysis (catches singing that Whisper transcribed)
         # Extract audio for this segment and analyze
-        if audio is not None and 'start' in segment and 'end' in segment:
-            seg_start = segment['start']
-            seg_end = segment['end']
+        if audio is not None and hasattr(segment, 'start') and hasattr(segment, 'end'):
+            seg_start = segment.start
+            seg_end = segment.end
             seg_duration = seg_end - seg_start
 
             # Extract segment audio
@@ -330,19 +387,37 @@ def detect_speech_segments(vocals_path):
             # Check if it's singing (pass duration for adaptive thresholding)
             if len(segment_audio) > sr * 0.1:  # Only analyze if > 0.1s
                 if is_singing_not_speech(segment_audio, sr, segment_duration=seg_duration):
-                    filtered_acoustic_count += len(segment.get('words', []))
+                    filtered_acoustic_count += len(segment.words)
                     print(f"  Filtered (acoustic): \"{segment_text}\"")
                     continue
 
         # Segment passed both filters - keep all words
-        for word in segment.get('words', []):
-            all_words.append(word)
+        # faster-whisper words have .start, .end, .word attributes
+        for word in segment.words:
+            # Convert to dict format expected by downstream code
+            all_words.append({
+                'word': word.word,
+                'start': word.start,
+                'end': word.end
+            })
+
+    # Safety check: If we filtered out > 70% of detected words, Whisper was hallucinating
+    # This happens when there's NO real voiceover, just music that Whisper transcribed
+    total_filtered = filtered_text_count + filtered_acoustic_count
+    if total_words > 0:
+        filter_percentage = (total_filtered / total_words) * 100
+        print(f"Detected {len(all_words)} words with timestamps ({filtered_text_count} filtered by text, {filtered_acoustic_count} filtered by acoustic analysis, {filter_percentage:.0f}% filtered)")
+
+        if filter_percentage > 70:
+            print(f"WARNING: {filter_percentage:.0f}% of detected 'speech' was filtered as music")
+            print("This indicates Whisper hallucinated speech from singing - no real voiceover detected")
+            return []
+    else:
+        print(f"Detected {len(all_words)} words with timestamps ({filtered_text_count} filtered by text, {filtered_acoustic_count} filtered by acoustic analysis)")
 
     if not all_words:
         print("Warning: No speech detected (all segments filtered as music)")
         return []
-
-    print(f"Detected {len(all_words)} words with timestamps ({filtered_text_count} filtered by text, {filtered_acoustic_count} filtered by acoustic analysis)")
 
     # Merge nearby words into phrases (words within 0.3s are part of same phrase)
     speech_segments = []
@@ -574,6 +649,51 @@ def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
     return output_path
 
 
+def detect_song_start(audio_path, window_size=5.0, energy_threshold=1.5):
+    """Detect where the actual song starts by finding energy increase.
+
+    Skips quiet/minimal intros like Pink Floyd's long instrumental openings.
+
+    Args:
+        audio_path: Path to audio file
+        window_size: Size of analysis window in seconds (default 5s)
+        energy_threshold: How much higher energy must be vs minimum (1.5 = 50% higher)
+
+    Returns:
+        Start time in seconds (0 if no intro detected)
+    """
+    try:
+        # Load audio
+        y, sr = librosa.load(str(audio_path), sr=22050, duration=120)  # Analyze first 2 minutes
+
+        # Calculate RMS energy in windows
+        hop_length = int(window_size * sr)
+        frame_length = hop_length
+
+        rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
+
+        # Find minimum energy (intro baseline)
+        min_energy = np.min(rms)
+
+        # Find where energy first exceeds threshold (song starts)
+        threshold = min_energy * energy_threshold
+
+        for i, energy in enumerate(rms):
+            if energy > threshold:
+                start_time = i * window_size
+                # Don't skip more than 60 seconds
+                start_time = min(start_time, 60.0)
+                if start_time > 10:  # Only skip if intro is >10 seconds
+                    print(f"Detected {start_time:.1f}s intro, skipping to main section")
+                    return start_time
+                return 0.0
+
+        return 0.0  # No intro detected
+    except Exception as e:
+        print(f"Warning: Intro detection failed: {e}, using full song")
+        return 0.0
+
+
 def separate_and_remix(video_audio_path, new_music_path, output_path,
                        vocals_volume=1.0, music_volume=0.7):
     """Full pipeline: replace background music while preserving voiceover.
@@ -648,11 +768,34 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
 
     subprocess.run(cmd, capture_output=True, text=True)
 
+    # Step 3.5: Detect and skip long instrumental intros (e.g., Pink Floyd)
+    intro_skip = detect_song_start(new_music_path)
+    music_to_use = new_music_path
+
+    if intro_skip > 0:
+        # Trim the intro from the music
+        trimmed_music_path = Path(tempfile.gettempdir()) / "music_no_intro.wav"
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", str(intro_skip),  # Skip intro
+            "-i", str(new_music_path),
+            "-acodec", "pcm_s16le",  # Re-encode audio (copy doesn't work with -ss)
+            "-ar", "44100",
+            "-ac", "2",
+            str(trimmed_music_path)
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            music_to_use = trimmed_music_path
+        else:
+            print(f"Warning: Intro skip failed: {result.stderr}")
+            music_to_use = new_music_path
+
     # Step 4: Mix clean voiceover with new music + ducking
     print("Step 4: Mixing voiceover with new music (auto-ducking enabled)...")
     mixed_path = mix_vocals_with_music_ducking(
         clean_voiceover_path,
-        new_music_path,
+        music_to_use,
         output_path,
         vocals_volume=vocals_volume,
         music_volume=music_volume

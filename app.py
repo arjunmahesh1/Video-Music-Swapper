@@ -8,9 +8,14 @@ from audio_analyzer import (
     analyze_audio_features,
     calculate_similarity,
     calculate_genre_similarity,
-    infer_video_genres
+    infer_video_genres,
+    select_song_probabilistic
 )
 from voice_separator import separate_and_remix, cleanup_demucs_output
+from cache_manager import (
+    load_recently_used_songs,
+    save_recently_used_songs
+)
 
 VIDEO_DIR = Path(__file__).with_name("video")
 AUDIO_DIR = Path(__file__).with_name("audio")
@@ -42,6 +47,8 @@ if 'selected_song' not in st.session_state:
     st.session_state.selected_song = None
 if 'preserve_voice' not in st.session_state:
     st.session_state.preserve_voice = False
+if 'recently_used_songs' not in st.session_state:
+    st.session_state.recently_used_songs = load_recently_used_songs()  # Load from cache
 
 # Check if .env file exists
 if not Path(".env").exists():
@@ -281,6 +288,20 @@ elif st.session_state.step == 4:
                                 'features': song_features
                             })
 
+                    # Add diversity to scoring
+                    import random
+                    for song in song_scores:
+                        # 1. Add small random variance (±5%) to shuffle similar songs
+                        random_factor = random.uniform(0.95, 1.05)
+                        song['similarity_score'] *= random_factor
+
+                        # 2. Penalize recently used songs (last 10 selections)
+                        if song['id'] in st.session_state.recently_used_songs:
+                            # Add penalty based on how recently used (more recent = bigger penalty)
+                            recency_index = st.session_state.recently_used_songs.index(song['id'])
+                            penalty = 0.15 * (1.0 - recency_index / len(st.session_state.recently_used_songs))
+                            song['similarity_score'] += penalty  # Increase score = worse match
+
                     # Sort by similarity (lower = better)
                     song_scores.sort(key=lambda x: x['similarity_score'])
 
@@ -297,9 +318,20 @@ elif st.session_state.step == 4:
                         if song['genres']:
                             st.caption(f"   Genres: {', '.join(song['genres'][:3])}")
 
-                    # Select best match (top result)
-                    selected_song = song_scores[0]
+                    # Select from top matches probabilistically (adds variety)
+                    # 50% chance = top match, 30% = 2nd, 20% = 3rd
+                    selected_song = select_song_probabilistic(song_scores, top_n=5, distribution='balanced')
                     st.session_state.selected_song = selected_song
+
+                    # Track this selection for diversity in future runs
+                    if selected_song['id'] not in st.session_state.recently_used_songs:
+                        st.session_state.recently_used_songs.insert(0, selected_song['id'])
+                        # Keep only last 10 selections
+                        if len(st.session_state.recently_used_songs) > 10:
+                            st.session_state.recently_used_songs = st.session_state.recently_used_songs[:10]
+
+                    # Save to cache for persistence across app restarts
+                    save_recently_used_songs(st.session_state.recently_used_songs)
 
                     st.success(f"Selected: **{selected_song['display_name']}**")
 
