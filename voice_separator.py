@@ -226,6 +226,30 @@ def is_singing_not_speech(audio_segment, sr=16000, segment_duration=None):
         return False  # If analysis fails, assume it's speech (conservative)
 
 
+def is_likely_advertising_voiceover(text):
+    """Check if text contains advertising/commercial language patterns.
+
+    Returns True if text appears to be advertising copy, False otherwise.
+    """
+    text_lower = text.lower().strip()
+
+    # Commercial/advertising phrases
+    ad_phrases = [
+        'sales event', 'limited time', 'offer', 'financing', 'lease',
+        'msrp', 'dealer', 'dealership', 'test drive', 'inventory',
+        'see dealer', 'contact', 'visit us', 'call now', 'hurry',
+        'ends soon', 'while supplies last', 'select models', 'terms apply',
+        'learn more', 'details at', 'restrictions apply', 'warranty',
+        'apr', 'down payment', 'per month', 'brand new', 'certified pre-owned',
+    ]
+
+    for phrase in ad_phrases:
+        if phrase in text_lower:
+            return True
+
+    return False
+
+
 def is_likely_music_lyrics(text):
     """Check if transcribed text is likely song lyrics rather than speech.
 
@@ -234,6 +258,10 @@ def is_likely_music_lyrics(text):
     import re
 
     text_lower = text.lower().strip()
+
+    # If it's advertising copy, it's NOT music lyrics
+    if is_likely_advertising_voiceover(text):
+        return False
 
     # Common music patterns - repeated syllables, ad-libs, vocalizations
     music_patterns = [
@@ -310,11 +338,15 @@ def is_likely_music_lyrics(text):
     return False
 
 
-def detect_speech_segments(vocals_path):
+def detect_speech_segments(vocals_path, accompaniment_path=None):
     """Detect when speech is happening using Whisper speech recognition.
 
     Uses Whisper's word-level timestamps to identify EXACTLY when voiceover is spoken.
     This approach is like Evernote AI - it transcribes only speech and ignores singing/music.
+
+    Args:
+        vocals_path: Path to separated vocals track
+        accompaniment_path: Path to separated accompaniment/music track (optional)
 
     Returns list of (start_time, end_time) tuples in seconds.
     """
@@ -351,17 +383,27 @@ def detect_speech_segments(vocals_path):
     all_words = []
     filtered_text_count = 0
     filtered_acoustic_count = 0
+    filtered_music_count = 0
 
     # Count total words for filtering statistics
     total_words = sum(len(seg.words) for seg in segments_list)
 
-    # Load the audio once for acoustic analysis
+    # Load the vocals audio once for acoustic analysis
     print("Loading audio for acoustic analysis...")
     try:
-        audio, sr = librosa.load(str(vocals_path), sr=16000)
+        vocals_audio, sr = librosa.load(str(vocals_path), sr=16000)
     except Exception as e:
-        print(f"Warning: Could not load audio for acoustic analysis: {e}")
-        audio = None
+        print(f"Warning: Could not load vocals audio: {e}")
+        vocals_audio = None
+
+    # Load the accompaniment track to check for background music
+    accompaniment_audio = None
+    if accompaniment_path and Path(accompaniment_path).exists():
+        try:
+            accompaniment_audio, _ = librosa.load(str(accompaniment_path), sr=16000)
+            print("Loaded accompaniment track for music detection")
+        except Exception as e:
+            print(f"Warning: Could not load accompaniment: {e}")
 
     for segment in segments_list:
         segment_text = segment.text.strip()
@@ -372,24 +414,71 @@ def detect_speech_segments(vocals_path):
             print(f"  Filtered (text): \"{segment_text}\"")
             continue
 
-        # Filter 2: Acoustic analysis (catches singing that Whisper transcribed)
-        # Extract audio for this segment and analyze
-        if audio is not None and hasattr(segment, 'start') and hasattr(segment, 'end'):
-            seg_start = segment.start
-            seg_end = segment.end
-            seg_duration = seg_end - seg_start
+        # Get segment timing
+        if not (hasattr(segment, 'start') and hasattr(segment, 'end')):
+            # No timing info, keep the segment
+            for word in segment.words:
+                all_words.append({
+                    'word': word.word,
+                    'start': word.start,
+                    'end': word.end
+                })
+            continue
 
+        seg_start = segment.start
+        seg_end = segment.end
+        seg_duration = seg_end - seg_start
+
+        # Filter 2: Background music detection (NEW - most reliable!)
+        # If there's loud music playing underneath vocals, it's singing not voiceover
+        # EXCEPTION: Skip this check for advertising/commercial voiceover (they use loud bg music)
+        is_advertising = is_likely_advertising_voiceover(segment_text)
+
+        if not is_advertising and accompaniment_audio is not None and len(accompaniment_audio) > 0:
+            start_sample = int(seg_start * sr)
+            end_sample = int(seg_end * sr)
+
+            # Extract accompaniment segment
+            if end_sample <= len(accompaniment_audio):
+                acc_segment = accompaniment_audio[start_sample:end_sample]
+
+                # Calculate RMS energy of accompaniment vs vocals
+                acc_energy = np.sqrt(np.mean(acc_segment ** 2))
+
+                if vocals_audio is not None and end_sample <= len(vocals_audio):
+                    vocal_segment = vocals_audio[start_sample:end_sample]
+                    vocal_energy = np.sqrt(np.mean(vocal_segment ** 2))
+
+                    # If accompaniment is very loud (>50% of vocal energy), it's likely singing
+                    # Raised from 0.2 to 0.5 to allow for dramatic commercial background music
+                    # Pure voiceover: music ~10-30% of vocal volume
+                    # Singing: music ~50-150% of vocal volume (same performance)
+                    if vocal_energy > 1e-6:  # Avoid division by zero
+                        music_ratio = acc_energy / vocal_energy
+
+                        if music_ratio > 0.5:  # Music is >50% as loud as vocals
+                            filtered_music_count += len(segment.words)
+                            print(f"  Filtered (music underneath): \"{segment_text}\" (music/vocal ratio: {music_ratio:.2f})")
+                            continue
+        elif is_advertising:
+            print(f"  Skipping music filter for advertising: \"{segment_text}\"")
+
+        # Filter 3: Acoustic analysis (catches singing that Whisper transcribed)
+        # Extract audio for this segment and analyze
+        if vocals_audio is not None:
             # Extract segment audio
             start_sample = int(seg_start * sr)
             end_sample = int(seg_end * sr)
-            segment_audio = audio[start_sample:end_sample]
 
-            # Check if it's singing (pass duration for adaptive thresholding)
-            if len(segment_audio) > sr * 0.1:  # Only analyze if > 0.1s
-                if is_singing_not_speech(segment_audio, sr, segment_duration=seg_duration):
-                    filtered_acoustic_count += len(segment.words)
-                    print(f"  Filtered (acoustic): \"{segment_text}\"")
-                    continue
+            if end_sample <= len(vocals_audio):
+                segment_audio = vocals_audio[start_sample:end_sample]
+
+                # Check if it's singing (pass duration for adaptive thresholding)
+                if len(segment_audio) > sr * 0.1:  # Only analyze if > 0.1s
+                    if is_singing_not_speech(segment_audio, sr, segment_duration=seg_duration):
+                        filtered_acoustic_count += len(segment.words)
+                        print(f"  Filtered (acoustic): \"{segment_text}\"")
+                        continue
 
         # Segment passed both filters - keep all words
         # faster-whisper words have .start, .end, .word attributes
@@ -403,17 +492,17 @@ def detect_speech_segments(vocals_path):
 
     # Safety check: If we filtered out > 70% of detected words, Whisper was hallucinating
     # This happens when there's NO real voiceover, just music that Whisper transcribed
-    total_filtered = filtered_text_count + filtered_acoustic_count
+    total_filtered = filtered_text_count + filtered_acoustic_count + filtered_music_count
     if total_words > 0:
         filter_percentage = (total_filtered / total_words) * 100
-        print(f"Detected {len(all_words)} words with timestamps ({filtered_text_count} filtered by text, {filtered_acoustic_count} filtered by acoustic analysis, {filter_percentage:.0f}% filtered)")
+        print(f"Detected {len(all_words)} words with timestamps ({filtered_text_count} filtered by text, {filtered_music_count} filtered by music detection, {filtered_acoustic_count} filtered by acoustic analysis, {filter_percentage:.0f}% filtered)")
 
         if filter_percentage > 70:
             print(f"WARNING: {filter_percentage:.0f}% of detected 'speech' was filtered as music")
             print("This indicates Whisper hallucinated speech from singing - no real voiceover detected")
             return []
     else:
-        print(f"Detected {len(all_words)} words with timestamps ({filtered_text_count} filtered by text, {filtered_acoustic_count} filtered by acoustic analysis)")
+        print(f"Detected {len(all_words)} words with timestamps ({filtered_text_count} filtered by text, {filtered_music_count} filtered by music detection, {filtered_acoustic_count} filtered by acoustic analysis)")
 
     if not all_words:
         print("Warning: No speech detected (all segments filtered as music)")
@@ -742,7 +831,7 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
 
     # Step 2: Detect ONLY voiceover segments (not singing)
     print("Step 2: Detecting voiceover segments...")
-    speech_segments = detect_speech_segments(cleaned_vocals_path)
+    speech_segments = detect_speech_segments(cleaned_vocals_path, accompaniment_path=separated['music'])
 
     if not speech_segments:
         print("No voiceover detected - using new music only")

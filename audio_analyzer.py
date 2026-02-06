@@ -214,7 +214,8 @@ def calculate_genre_similarity(video_genres, song_genres, debug=False):
             # NOTE: Each genre family includes its key as a keyword for self-matching
             genre_families = {
                 'rock': ['rock', 'metal', 'punk', 'grunge', 'alternative', 'indie rock', 'hard rock',
-                         'punk rock', 'hardcore punk', 'blues rock', 'country rock'],
+                         'punk rock', 'hardcore punk', 'blues rock', 'country rock', 'soft rock',
+                         'classic rock', 'southern rock', 'garage rock'],
                 'metal': ['metal', 'heavy metal', 'thrash metal', 'speed metal', 'doom metal',
                           'stoner metal', 'black metal', 'death metal', 'metalcore'],
                 'electronic': ['electronic', 'edm', 'techno', 'house', 'dubstep', 'trap', 'ambient',
@@ -225,7 +226,8 @@ def calculate_genre_similarity(video_genres, song_genres, debug=False):
                 'pop': ['pop', 'indie pop', 'synth pop', 'upbeat', 'dance pop', 'electropop'],
                 'indie': ['indie', 'alternative', 'bedroom pop', 'lo-fi', 'indie rock', 'indie folk',
                          'indie pop', 'shoegaze'],
-                'r&b': ['r&b', 'soul', 'rnb', 'neo soul', 'neo-soul', 'funk', 'funk soul'],
+                'r&b': ['r&b', 'soul', 'rnb', 'neo soul', 'neo-soul', 'funk', 'funk soul',
+                        'alternative r&b', 'contemporary r&b', 'progressive r&b'],
                 'jazz': ['jazz', 'blues', 'swing', 'downtempo', 'smooth jazz', 'bebop', 'jazz fusion',
                         'acid jazz', 'nu jazz'],
                 'blues': ['blues', 'blues rock', 'acoustic blues', 'delta blues', 'chicago blues'],
@@ -241,13 +243,25 @@ def calculate_genre_similarity(video_genres, song_genres, debug=False):
                 'afrobeats': ['afrobeats', 'afrobeat', 'afropop', 'afro-pop', 'afro', 'afro fusion']
             }
 
-            for _, keywords in genre_families.items():
-                vg_in_family = any(kw in vg for kw in keywords)
-                sg_in_family = any(kw in sg for kw in keywords)
+            for family_name, keywords in genre_families.items():
+                # Use strict matching: ALL words in the genre must be covered by keywords in the family
+                # This prevents "alternative r&b" from matching rock family (which has "alternative" but not "r&b")
+                vg_words = set(vg.replace('-', ' ').split())
+                sg_words = set(sg.replace('-', ' ').split())
+
+                # Get all individual words from all keywords in this family
+                family_words = set()
+                for kw in keywords:
+                    family_words.update(kw.replace('-', ' ').split())
+
+                # Genre is in family only if ALL its words are in the family vocabulary
+                vg_in_family = len(vg_words) > 0 and vg_words.issubset(family_words)
+                sg_in_family = len(sg_words) > 0 and sg_words.issubset(family_words)
+
                 if vg_in_family and sg_in_family:
                     partial_score = max(partial_score, 0.5)
                     if debug:
-                        print(f"    Genre family match (score=0.5): {vg} and {sg} both in family")
+                        print(f"    Genre family match (score=0.5): {vg} and {sg} both in '{family_name}' family")
 
     if debug and partial_score == 0.0:
         print(f"    No genre match: video={video_genres_norm} vs song={song_genres_norm}")
