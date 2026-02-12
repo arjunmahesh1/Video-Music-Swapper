@@ -9,6 +9,8 @@ import re
 import numpy as np
 import torch
 import librosa
+from scipy.io import wavfile
+from scipy.signal import butter, sosfiltfilt
 from faster_whisper import WhisperModel
 
 
@@ -156,6 +158,89 @@ def _is_probable_speech_text(text):
         return False
 
     return True
+
+
+def suppress_music_bleed_with_reference(
+    vocals_path,
+    accompaniment_path,
+    output_path,
+    suppression_strength=1.25,
+    residual_floor=0.06,
+    sr=32000
+):
+    """Suppress residual original music in vocals using accompaniment reference."""
+    vocals_path = Path(vocals_path)
+    accompaniment_path = Path(accompaniment_path)
+    output_path = Path(output_path)
+
+    vocals, _ = librosa.load(str(vocals_path), sr=sr, mono=True)
+    accompaniment, _ = librosa.load(str(accompaniment_path), sr=sr, mono=True)
+
+    if len(vocals) == 0:
+        raise Exception("Vocal track is empty")
+
+    target_len = max(len(vocals), len(accompaniment))
+    if len(vocals) < target_len:
+        vocals = np.pad(vocals, (0, target_len - len(vocals)))
+    if len(accompaniment) < target_len:
+        accompaniment = np.pad(accompaniment, (0, target_len - len(accompaniment)))
+
+    n_fft = 2048
+    hop = 256
+
+    v_stft = librosa.stft(vocals, n_fft=n_fft, hop_length=hop)
+    a_stft = librosa.stft(accompaniment, n_fft=n_fft, hop_length=hop)
+
+    v_mag = np.abs(v_stft)
+    a_mag = np.abs(a_stft)
+    v_pow = v_mag ** 2
+    a_pow = a_mag ** 2
+
+    # Base spectral subtraction in power domain.
+    residual_pow = np.maximum(v_pow - suppression_strength * a_pow, residual_floor * v_pow)
+    mask = np.sqrt(residual_pow / (v_pow + 1e-9))
+
+    # Emphasize speech band and attenuate out-of-band residual music.
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+    speech_band = (freqs >= 120) & (freqs <= 5200)
+    band_weights = np.where(speech_band, 1.0, 0.42).astype(np.float32)[:, None]
+    mask *= band_weights
+
+    # Frame-level accompaniment dominance penalty (strong for music-heavy bursts).
+    frame_v = np.mean(v_mag, axis=0)
+    frame_a = np.mean(a_mag, axis=0)
+    frame_dom = frame_a / (frame_v + 1e-8)
+    dom_penalty = 1.0 / (1.0 + np.maximum(0.0, frame_dom - 0.42) * 3.2)
+    dom_penalty = np.clip(dom_penalty, 0.15, 1.0)
+    mask *= dom_penalty[None, :]
+
+    # Extra attenuation where accompaniment locally dominates magnitude.
+    heavy_music_bins = a_mag > (0.92 * v_mag)
+    mask[heavy_music_bins] *= 0.72
+
+    # Light temporal smoothing to reduce musical bursts without pumping.
+    smooth_kernel = np.array([0.15, 0.70, 0.15], dtype=np.float32)
+    mask = np.apply_along_axis(lambda m: np.convolve(m, smooth_kernel, mode="same"), 1, mask)
+    mask = np.clip(mask, max(0.03, residual_floor * 0.5), 1.0)
+
+    enhanced_stft = v_stft * mask
+    enhanced = librosa.istft(enhanced_stft, hop_length=hop, length=target_len)
+
+    # Final bandpass in time domain for voiceover intelligibility.
+    low_cut = 120.0
+    high_cut = min(5200.0, sr * 0.45)
+    if high_cut > low_cut + 50:
+        sos = butter(6, [low_cut / (sr * 0.5), high_cut / (sr * 0.5)], btype="bandpass", output="sos")
+        enhanced = sosfiltfilt(sos, enhanced)
+
+    peak = float(np.max(np.abs(enhanced))) if len(enhanced) > 0 else 0.0
+    if peak > 0.98:
+        enhanced = enhanced / peak * 0.98
+
+    enhanced_i16 = np.int16(np.clip(enhanced, -1.0, 1.0) * 32767)
+    wavfile.write(str(output_path), sr, enhanced_i16)
+
+    return output_path
 
 
 def separate_audio(audio_path, output_dir=None, model=None):
@@ -500,8 +585,9 @@ def _finalize_speech_segments(raw_segments):
 
     padded_segments = []
     for start, end in cleaned_segments:
-        padded_start = max(0.0, start - 0.03)
-        padded_end = end + 0.03
+        # Keep generous padding so phrase edges are not cut.
+        padded_start = max(0.0, start - 0.10)
+        padded_end = end + 0.10
         padded_segments.append((padded_start, padded_end))
 
     return padded_segments
@@ -515,7 +601,11 @@ def detect_speech_segments(vocals_path, accompaniment_path=None):
 
     if DISABLE_FASTER_WHISPER:
         print("Skipping faster-whisper (disabled due previous environment error).")
-        return _detect_speech_segments_fallback_vad(vocals_path, asr_failed=True)
+        return _detect_speech_segments_fallback_vad(
+            vocals_path,
+            accompaniment_path=accompaniment_path,
+            asr_failed=True
+        )
 
     # Use a lighter Whisper model for longer clips to keep runtime practical.
     whisper_model_name = "base" if (duration_seconds and duration_seconds <= 90) else "tiny"
@@ -564,7 +654,11 @@ def detect_speech_segments(vocals_path, accompaniment_path=None):
             DISABLE_FASTER_WHISPER = True
             print("Disabling faster-whisper for this process due dependency mismatch.")
         print("Falling back to VAD detection...")
-        return _detect_speech_segments_fallback_vad(vocals_path, asr_failed=True)
+        return _detect_speech_segments_fallback_vad(
+            vocals_path,
+            accompaniment_path=accompaniment_path,
+            asr_failed=True
+        )
 
     if not segments_list:
         print("Warning: Whisper found no speech segments")
@@ -694,7 +788,7 @@ def detect_speech_segments(vocals_path, accompaniment_path=None):
     return speech_segments
 
 
-def _detect_speech_segments_fallback_vad(vocals_path, asr_failed=False):
+def _detect_speech_segments_fallback_vad(vocals_path, accompaniment_path=None, asr_failed=False):
     """Fallback speech detection using silence detection.
 
     This path is intentionally voice-preserving when ASR is unavailable.
@@ -702,7 +796,7 @@ def _detect_speech_segments_fallback_vad(vocals_path, asr_failed=False):
     cmd = [
         "ffmpeg",
         "-i", str(vocals_path),
-        "-af", "silencedetect=noise=-35dB:d=0.12",
+        "-af", "silencedetect=noise=-38dB:d=0.10",
         "-f", "null",
         "-"
     ]
@@ -754,11 +848,58 @@ def _detect_speech_segments_fallback_vad(vocals_path, asr_failed=False):
         speech_segments.append((s, e))
 
     # Keep fallback less aggressive than ASR path: merge gaps and pad without burst dropping.
-    speech_segments = _merge_segments(speech_segments, max_gap=0.45)
+    speech_segments = _merge_segments(speech_segments, max_gap=0.75)
     padded = []
     for s, e in speech_segments:
-        padded.append((max(0.0, s - 0.05), min(duration, e + 0.05)))
+        padded.append((max(0.0, s - 0.12), min(duration, e + 0.12)))
     speech_segments = padded
+
+    # Additional cleanup pass for fallback mode:
+    # remove short music-dominant bursts ("burps"/ad-libs) while preserving narration.
+    filtered_segments = []
+    try:
+        vocals_audio, sr = librosa.load(str(vocals_path), sr=16000, mono=True)
+        accompaniment_audio = None
+        if accompaniment_path and Path(accompaniment_path).exists():
+            accompaniment_audio, _ = librosa.load(str(accompaniment_path), sr=16000, mono=True)
+
+        for s, e in speech_segments:
+            seg_dur = e - s
+            if seg_dur < 0.14:
+                continue
+
+            start_sample = max(0, int(s * sr))
+            end_sample = min(len(vocals_audio), int(e * sr))
+            if end_sample <= start_sample:
+                continue
+
+            vocal_segment = vocals_audio[start_sample:end_sample]
+            if len(vocal_segment) < int(0.08 * sr):
+                continue
+
+            # Drop short segments that look like singing/ad-libs.
+            if seg_dur < 1.0 and is_singing_not_speech(vocal_segment, sr=sr, segment_duration=seg_dur):
+                continue
+
+            if accompaniment_audio is not None and end_sample <= len(accompaniment_audio):
+                acc_segment = accompaniment_audio[start_sample:end_sample]
+                vocal_energy = float(np.sqrt(np.mean(vocal_segment ** 2)))
+                acc_energy = float(np.sqrt(np.mean(acc_segment ** 2)))
+                if vocal_energy > 1e-7:
+                    music_ratio = acc_energy / vocal_energy
+
+                    # Aggressive for short bursts, conservative for narration.
+                    if (seg_dur < 1.2 and music_ratio > 0.35) or (seg_dur >= 1.2 and music_ratio > 0.95):
+                        continue
+
+            filtered_segments.append((s, e))
+    except Exception as e:
+        print(f"Warning: Fallback acoustic filtering failed: {e}")
+        filtered_segments = speech_segments
+
+    # If filtering removed everything, keep original fallback windows to preserve narration.
+    if filtered_segments:
+        speech_segments = filtered_segments
 
     total_speech = sum(e - s for s, e in speech_segments)
     if asr_failed and (len(speech_segments) <= 1 or total_speech < max(2.0, duration * 0.06)):
@@ -766,6 +907,12 @@ def _detect_speech_segments_fallback_vad(vocals_path, asr_failed=False):
             "Fallback VAD produced low-confidence speech coverage; "
             "using full-track speech window to preserve narration."
         )
+        speech_segments = [(0.0, duration)]
+
+    # If ASR is unavailable in this environment, prefer continuity over strict gating.
+    # We rely on de-bleed + gentle gates to remove music burps instead of cutting phrases.
+    if asr_failed:
+        print("ASR unavailable: using full-track speech coverage for continuity.")
         speech_segments = [(0.0, duration)]
 
     print(f"Fallback: Detected {len(all_segments)} segments, filtered to {len(speech_segments)}")
@@ -846,7 +993,7 @@ def extract_speech_only(vocals_path, output_path):
 
 def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
                                    vocals_volume=1.0, music_volume=0.8,
-                                   gate_threshold=0.015, process_timeout=600):
+                                   gate_threshold=0.012, process_timeout=600):
     """Mix vocals with new music using sidechain ducking and noise gate.
 
     The music volume automatically ducks (lowers) when voice is detected,
@@ -870,8 +1017,8 @@ def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
 
     filter_complex = (
         # Speech-focused filtering + gate to suppress residual singing/music.
-        f"[0:a]highpass=f=110,lowpass=f=5200,"
-        f"agate=threshold={gate_threshold}:ratio=4:attack=2:release=180:range=0.06,"
+        f"[0:a]highpass=f=120,lowpass=f=5000,"
+        f"agate=threshold={gate_threshold}:ratio=3:attack=1:release=220:range=0.09,"
         f"volume={vocals_volume}[voice];"
         f"[1:a]volume={music_volume}[music_raw];"
         # Aggressive sidechain so music ducks clearly under voiceover.
@@ -1013,9 +1160,26 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         ]
         _run_checked(fallback_cmd, timeout=ffmpeg_timeout, step_name="Vocal cleanup (compatibility)")
 
+    # Step 1.6: Suppress residual original-music bleed using accompaniment reference
+    print("Step 1.6: Suppressing residual original music from vocals...")
+    debleed_vocals_path = Path(tempfile.gettempdir()) / "debleed_vocals.wav"
+    speech_source_path = cleaned_vocals_path
+    try:
+        suppress_music_bleed_with_reference(
+            cleaned_vocals_path,
+            separated['music'],
+            debleed_vocals_path,
+            suppression_strength=1.35,
+            residual_floor=0.05,
+            sr=32000
+        )
+        speech_source_path = debleed_vocals_path
+    except Exception as e:
+        print(f"Warning: Music bleed suppression failed ({e}); continuing with cleaned vocals.")
+
     # Step 2: Detect ONLY voiceover segments (not singing)
     print("Step 2: Detecting voiceover segments...")
-    speech_segments = detect_speech_segments(cleaned_vocals_path, accompaniment_path=separated['music'])
+    speech_segments = detect_speech_segments(speech_source_path, accompaniment_path=separated['music'])
     force_full_track_gate = False
     total_detected_speech = sum((e - s) for s, e in speech_segments) if speech_segments else 0.0
     min_expected_speech = max(2.0, duration_seconds * 0.06)
@@ -1041,11 +1205,11 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         )
         fallback_filter = (
             "highpass=f=110,lowpass=f=5200,"
-            "agate=threshold=0.010:ratio=2:attack=2:release=220:range=0.08"
+            "agate=threshold=0.008:ratio=2:attack=2:release=260:range=0.10"
         )
         cmd = [
             "ffmpeg", "-y",
-            "-i", str(cleaned_vocals_path),
+            "-i", str(speech_source_path),
             "-af", fallback_filter,
             str(clean_voiceover_path)
         ]
@@ -1058,15 +1222,32 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
             f"volume=enable='{enable_expr}':volume=1,"
             f"volume=enable='not({enable_expr})':volume=0,"
             "highpass=f=110,lowpass=f=5200,"
-            "agate=threshold=0.028:ratio=6:attack=3:release=120:range=0.02"
+            "agate=threshold=0.014:ratio=3:attack=2:release=220:range=0.10"
         )
         cmd = [
             "ffmpeg", "-y",
-            "-i", str(cleaned_vocals_path),
+            "-i", str(speech_source_path),
             "-af", speech_mask_filter,
             str(clean_voiceover_path)
         ]
         _run_checked(cmd, timeout=ffmpeg_timeout, step_name="Speech extraction")
+
+    # Step 3.2: Final de-bleed pass on extracted voiceover.
+    print("Step 3.2: Final voiceover de-bleed (removing residual original music)...")
+    final_voiceover_path = Path(tempfile.gettempdir()) / "final_voiceover.wav"
+    mix_voice_source = clean_voiceover_path
+    try:
+        suppress_music_bleed_with_reference(
+            clean_voiceover_path,
+            separated['music'],
+            final_voiceover_path,
+            suppression_strength=1.60,
+            residual_floor=0.03,
+            sr=32000
+        )
+        mix_voice_source = final_voiceover_path
+    except Exception as e:
+        print(f"Warning: Final de-bleed pass failed ({e}); using pre-final voiceover track.")
 
     # Step 3.5: Detect and skip long instrumental intros (e.g., Pink Floyd)
     intro_skip = detect_song_start(new_music_path)
@@ -1094,7 +1275,7 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
     # Step 4: Mix clean voiceover with new music + ducking
     print("Step 4: Mixing voiceover with new music (auto-ducking enabled)...")
     mixed_path = mix_vocals_with_music_ducking(
-        clean_voiceover_path,
+        mix_voice_source,
         music_to_use,
         output_path,
         vocals_volume=vocals_volume,
