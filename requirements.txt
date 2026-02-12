@@ -9,3 +9,4 @@ numpy
 scipy
 demucs
 faster-whisper
+huggingface_hub>=0.23.0

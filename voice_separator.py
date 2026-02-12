@@ -25,6 +25,31 @@ SHORT_BURST_SECONDS = 0.35
 ISOLATED_BURST_GAP_SECONDS = 0.70
 MAX_SEGMENTS_BEFORE_CONSOLIDATION = 180
 MAX_SEGMENTS_FOR_EXPRESSION = 260
+DISABLE_FASTER_WHISPER = False
+
+
+def _find_demucs_stem_file(model_output, stem_base_name):
+    """Return demucs stem path for either mp3 or wav output."""
+    for ext in ("mp3", "wav"):
+        candidate = model_output / f"{stem_base_name}.{ext}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _segment_size_for_model(model_id, duration_seconds=None, has_cuda=False):
+    """Pick a safe demucs segment size for the specific model."""
+    # htdemucs has a hard maximum ~7.8s; keep under that.
+    if "htdemucs" in model_id:
+        return "7.5"
+
+    if has_cuda:
+        return "20"
+
+    if duration_seconds and duration_seconds <= 120:
+        return "12"
+
+    return "10"
 
 
 def _run_checked(cmd, timeout=None, env=None, step_name="Command"):
@@ -180,14 +205,13 @@ def separate_audio(audio_path, output_dir=None, model=None):
         print(f"Trying Demucs model: {model_name}...")
         print(f"Using Python: {python_exe}")
 
-        # Build command - segment size balances memory vs speed
-        # Larger segments = faster but more RAM.
-        if torch.cuda.is_available():
-            segment_size = "20"
-        elif duration_seconds and duration_seconds <= 120:
-            segment_size = "12"
-        else:
-            segment_size = "10"
+        # Build command - segment size balances memory vs speed.
+        # Model-specific cap is required for htdemucs (max ~7.8s).
+        segment_size = _segment_size_for_model(
+            model_id,
+            duration_seconds=duration_seconds,
+            has_cuda=torch.cuda.is_available()
+        )
 
         cmd = [
             python_exe, "-m", "demucs",
@@ -195,6 +219,9 @@ def separate_audio(audio_path, output_dir=None, model=None):
             "-n", model_id,           # Specify model
             "--two-stems=vocals",     # Only separate vocals/accompaniment
             "--segment", segment_size,
+            "--mp3",                  # Avoid wav save path that requires torchcodec
+            "--mp3-bitrate", "320",
+            "--mp3-preset", "4",
             "-o", str(output_dir),
             str(audio_path)
         ]
@@ -242,10 +269,10 @@ def separate_audio(audio_path, output_dir=None, model=None):
             stem_name = audio_path.stem
             model_output = output_dir / model_id / stem_name
 
-            vocals_path = model_output / "vocals.wav"
-            music_path = model_output / "no_vocals.wav"
+            vocals_path = _find_demucs_stem_file(model_output, "vocals")
+            music_path = _find_demucs_stem_file(model_output, "no_vocals")
 
-            if vocals_path.exists() and music_path.exists():
+            if vocals_path and music_path:
                 print(f"Separation complete using {model_name}!")
                 return {
                     'vocals': vocals_path,
@@ -482,8 +509,13 @@ def _finalize_speech_segments(raw_segments):
 
 def detect_speech_segments(vocals_path, accompaniment_path=None):
     """Detect speech windows while filtering out singing/music bleed."""
+    global DISABLE_FASTER_WHISPER
     vocals_path = Path(vocals_path)
     duration_seconds = _probe_duration_seconds(vocals_path)
+
+    if DISABLE_FASTER_WHISPER:
+        print("Skipping faster-whisper (disabled due previous environment error).")
+        return _detect_speech_segments_fallback_vad(vocals_path, asr_failed=True)
 
     # Use a lighter Whisper model for longer clips to keep runtime practical.
     whisper_model_name = "base" if (duration_seconds and duration_seconds <= 90) else "tiny"
@@ -528,8 +560,11 @@ def detect_speech_segments(vocals_path, accompaniment_path=None):
         segments_list = list(segments)
     except Exception as e:
         print(f"Warning: faster-whisper failed: {e}")
+        if "snapshot_download()" in str(e):
+            DISABLE_FASTER_WHISPER = True
+            print("Disabling faster-whisper for this process due dependency mismatch.")
         print("Falling back to VAD detection...")
-        return _detect_speech_segments_fallback_vad(vocals_path)
+        return _detect_speech_segments_fallback_vad(vocals_path, asr_failed=True)
 
     if not segments_list:
         print("Warning: Whisper found no speech segments")
@@ -659,12 +694,15 @@ def detect_speech_segments(vocals_path, accompaniment_path=None):
     return speech_segments
 
 
-def _detect_speech_segments_fallback_vad(vocals_path):
-    """Fallback speech detection using simple silence detection."""
+def _detect_speech_segments_fallback_vad(vocals_path, asr_failed=False):
+    """Fallback speech detection using silence detection.
+
+    This path is intentionally voice-preserving when ASR is unavailable.
+    """
     cmd = [
         "ffmpeg",
         "-i", str(vocals_path),
-        "-af", "silencedetect=noise=-40dB:d=0.15",
+        "-af", "silencedetect=noise=-35dB:d=0.12",
         "-f", "null",
         "-"
     ]
@@ -683,7 +721,7 @@ def _detect_speech_segments_fallback_vad(vocals_path):
         h, m, s = duration_match.groups()
         duration = int(h) * 3600 + int(m) * 60 + float(s)
     else:
-        duration = 60
+        duration = _probe_duration_seconds(vocals_path) or 60.0
 
     all_segments = []
     if not silence_ends or (silence_starts and silence_starts[0] < silence_ends[0]):
@@ -696,9 +734,39 @@ def _detect_speech_segments_fallback_vad(vocals_path):
         if end > start:
             all_segments.append((start, end))
 
-    MAX_SPEECH_DURATION = 4.0
-    speech_segments = [(s, e) for s, e in all_segments if (e - s) <= MAX_SPEECH_DURATION]
-    speech_segments = _finalize_speech_segments(speech_segments)
+    # Voice-preserving fallback: keep meaningful non-silent regions and avoid over-pruning.
+    MIN_SEGMENT_DURATION = 0.12
+    MAX_SEGMENT_DURATION = 24.0
+    speech_segments = []
+    for s, e in all_segments:
+        seg_dur = e - s
+        if seg_dur < MIN_SEGMENT_DURATION:
+            continue
+        if seg_dur > MAX_SEGMENT_DURATION:
+            # Split very long segments so downstream enable expressions stay stable.
+            cursor = s
+            while cursor < e:
+                chunk_end = min(cursor + MAX_SEGMENT_DURATION, e)
+                if chunk_end - cursor >= MIN_SEGMENT_DURATION:
+                    speech_segments.append((cursor, chunk_end))
+                cursor = chunk_end
+            continue
+        speech_segments.append((s, e))
+
+    # Keep fallback less aggressive than ASR path: merge gaps and pad without burst dropping.
+    speech_segments = _merge_segments(speech_segments, max_gap=0.45)
+    padded = []
+    for s, e in speech_segments:
+        padded.append((max(0.0, s - 0.05), min(duration, e + 0.05)))
+    speech_segments = padded
+
+    total_speech = sum(e - s for s, e in speech_segments)
+    if asr_failed and (len(speech_segments) <= 1 or total_speech < max(2.0, duration * 0.06)):
+        print(
+            "Fallback VAD produced low-confidence speech coverage; "
+            "using full-track speech window to preserve narration."
+        )
+        speech_segments = [(0.0, duration)]
 
     print(f"Fallback: Detected {len(all_segments)} segments, filtered to {len(speech_segments)}")
     return speech_segments
@@ -778,7 +846,7 @@ def extract_speech_only(vocals_path, output_path):
 
 def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
                                    vocals_volume=1.0, music_volume=0.8,
-                                   gate_threshold=0.035, process_timeout=600):
+                                   gate_threshold=0.015, process_timeout=600):
     """Mix vocals with new music using sidechain ducking and noise gate.
 
     The music volume automatically ducks (lowers) when voice is detected,
@@ -803,7 +871,7 @@ def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
     filter_complex = (
         # Speech-focused filtering + gate to suppress residual singing/music.
         f"[0:a]highpass=f=110,lowpass=f=5200,"
-        f"agate=threshold={gate_threshold}:ratio=8:attack=3:release=120:range=0.02,"
+        f"agate=threshold={gate_threshold}:ratio=4:attack=2:release=180:range=0.06,"
         f"volume={vocals_volume}[voice];"
         f"[1:a]volume={music_volume}[music_raw];"
         # Aggressive sidechain so music ducks clearly under voiceover.
@@ -948,25 +1016,32 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
     # Step 2: Detect ONLY voiceover segments (not singing)
     print("Step 2: Detecting voiceover segments...")
     speech_segments = detect_speech_segments(cleaned_vocals_path, accompaniment_path=separated['music'])
+    force_full_track_gate = False
+    total_detected_speech = sum((e - s) for s, e in speech_segments) if speech_segments else 0.0
+    min_expected_speech = max(2.0, duration_seconds * 0.06)
 
     if not speech_segments:
-        print("No voiceover detected - using new music only")
-        # Just copy the new music as output
-        shutil.copy(new_music_path, output_path)
-        return output_path
+        print("No speech segments detected; using full-track speech-gate fallback.")
+        force_full_track_gate = True
+    elif total_detected_speech < min_expected_speech:
+        print(
+            f"Low-confidence speech detection ({total_detected_speech:.1f}s total); "
+            "using full-track speech-gate fallback to avoid dropping narration."
+        )
+        force_full_track_gate = True
 
     # Step 3: Extract voiceover using detected segments
     print("Step 3: Extracting voiceover segments...")
     clean_voiceover_path = Path(tempfile.gettempdir()) / "clean_voiceover.wav"
 
-    if len(speech_segments) > MAX_SEGMENTS_FOR_EXPRESSION:
+    if force_full_track_gate or len(speech_segments) > MAX_SEGMENTS_FOR_EXPRESSION:
         print(
             f"{len(speech_segments)} speech segments detected; "
             "using aggressive full-track speech gate fallback."
         )
         fallback_filter = (
             "highpass=f=110,lowpass=f=5200,"
-            "agate=threshold=0.032:ratio=8:attack=3:release=120:range=0.015"
+            "agate=threshold=0.010:ratio=2:attack=2:release=220:range=0.08"
         )
         cmd = [
             "ffmpeg", "-y",

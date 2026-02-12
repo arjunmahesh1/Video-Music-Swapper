@@ -335,7 +335,7 @@ def _download_with_ytdlp_search(search_query, output_path, cookie_file=None, bro
         ytdlp_po_token = ""
     base_cmd = [
         "yt-dlp",
-        f"ytsearch1:{search_query}",
+        f"ytsearch5:{search_query} official audio",
         "--no-playlist",
         "--no-progress",
         "--no-update",
@@ -346,6 +346,8 @@ def _download_with_ytdlp_search(search_query, output_path, cookie_file=None, bro
         "--extractor-retries", "2",
         "--js-runtimes", "node",
         "--extractor-args", "youtube:player_client=web,default",
+        "--match-filter", "duration>=60",
+        "--playlist-items", "1",
         "-x",
         "--audio-format", "mp3",
     ]
