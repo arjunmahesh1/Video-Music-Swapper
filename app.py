@@ -22,6 +22,19 @@ AUDIO_DIR = Path(__file__).with_name("audio")
 SAMPLE_VIDEO = VIDEO_DIR / "Gatorade.mp4"
 SAMPLE_AUDIO = AUDIO_DIR / "Can't Hold Us - Macklemore & Ryan Lewis (feat. Ray Dalton).mp3"
 
+def run_subprocess_checked(cmd, step_name, timeout=600):
+    """Run subprocess and fail fast with a useful message."""
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise Exception(f"{step_name} timed out after {timeout}s")
+
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or "").strip()
+        raise Exception(f"{step_name} failed: {err}")
+
+    return result
+
 st.set_page_config(page_title="Video Music Swapper", page_icon="🎵", layout="centered")
 
 # Initialize session state
@@ -201,7 +214,7 @@ elif st.session_state.step == 3:
     preserve_voice = st.checkbox(
         "Preserve original voiceover",
         value=st.session_state.preserve_voice,
-        help="AI extracts speech and mixes it with new music (takes 30-60 seconds)"
+        help="AI extracts speech and mixes it with new music (often 5-10 minutes on CPU; faster with GPU)"
     )
     st.session_state.preserve_voice = preserve_voice
 
@@ -353,13 +366,17 @@ elif st.session_state.step == 4:
                             "ffmpeg", "-y",
                             "-i", str(v_path),
                             "-vn", "-acodec", "pcm_s16le",
-                            "-ar", "44100", "-ac", "2",
+                            "-ar", "32000", "-ac", "1",
                             str(original_audio)
                         ]
-                        subprocess.run(extract_cmd, capture_output=True)
-
-                        # Separate and mix
                         try:
+                            run_subprocess_checked(
+                                extract_cmd,
+                                "Extract video audio for voice preservation",
+                                timeout=180
+                            )
+
+                            # Separate and mix
                             mixed_audio = tmp_path / "mixed_audio.wav"
                             separate_and_remix(
                                 original_audio,
@@ -386,7 +403,11 @@ elif st.session_state.step == 4:
                         "-shortest",
                         str(out_path)
                     ]
-                    result = subprocess.run(cmd, capture_output=True)
+                    mux_error = None
+                    try:
+                        run_subprocess_checked(cmd, "Create final video", timeout=900)
+                    except Exception as e:
+                        mux_error = str(e)
 
                     # Cleanup
                     if st.session_state.preserve_voice:
@@ -395,9 +416,9 @@ elif st.session_state.step == 4:
                         except:
                             pass
 
-                    if result.returncode:
+                    if mux_error:
                         st.error("Video processing failed")
-                        st.code(result.stderr.decode() or "Unknown error")
+                        st.code(mux_error)
                     else:
                         out_bytes = out_path.read_bytes()
                         st.success("Complete!")
@@ -488,12 +509,16 @@ elif st.session_state.step == 4:
                                 "ffmpeg", "-y",
                                 "-i", str(v_path),
                                 "-vn", "-acodec", "pcm_s16le",
-                                "-ar", "44100", "-ac", "2",
+                                "-ar", "32000", "-ac", "1",
                                 str(original_audio)
                             ]
-                            subprocess.run(extract_cmd, capture_output=True)
-
                             try:
+                                run_subprocess_checked(
+                                    extract_cmd,
+                                    "Extract video audio for voice preservation",
+                                    timeout=180
+                                )
+
                                 mixed_audio = tmp_path / "mixed_audio.wav"
                                 separate_and_remix(
                                     original_audio,
@@ -520,7 +545,11 @@ elif st.session_state.step == 4:
                             "-shortest",
                             str(out_path)
                         ]
-                        result = subprocess.run(cmd, capture_output=True)
+                        mux_error = None
+                        try:
+                            run_subprocess_checked(cmd, "Create final video", timeout=900)
+                        except Exception as e:
+                            mux_error = str(e)
 
                         if st.session_state.preserve_voice:
                             try:
@@ -528,9 +557,9 @@ elif st.session_state.step == 4:
                             except:
                                 pass
 
-                        if result.returncode:
+                        if mux_error:
                             st.error("Video processing failed")
-                            st.code(result.stderr.decode() or "Unknown error")
+                            st.code(mux_error)
                         else:
                             out_bytes = out_path.read_bytes()
                             st.success("Complete!")

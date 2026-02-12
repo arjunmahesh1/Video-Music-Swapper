@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 
 load_dotenv()
+SPOTDL_TIMEOUT_SECONDS = 420
 
 class SpotifyManager:
     def __init__(self):
@@ -341,7 +342,18 @@ def download_spotify_track(spotify_url, output_path=None):
         "--format", "mp3"
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=SPOTDL_TIMEOUT_SECONDS
+        )
+    except subprocess.TimeoutExpired:
+        raise Exception(
+            f"spotdl timed out after {SPOTDL_TIMEOUT_SECONDS}s. "
+            "This usually means the source is unavailable or network is slow."
+        )
 
     if result.returncode != 0:
         raise Exception(f"spotdl failed: {result.stderr}")
