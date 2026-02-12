@@ -352,9 +352,20 @@ elif st.session_state.step == 4:
                 with st.spinner("Downloading song..."):
                     try:
                         spotify_url = selected_song['spotify_url']
-                        a_path = download_spotify_track(spotify_url, tmp_path / "downloaded_track.mp3")
+                        search_query = f"{selected_song.get('artist', '')} - {selected_song.get('name', '')}".strip(" -")
+                        a_path = download_spotify_track(
+                            spotify_url,
+                            tmp_path / "downloaded_track.mp3",
+                            search_query=search_query or selected_song.get('display_name')
+                        )
                     except Exception as e:
                         st.error(f"Download failed: {str(e)}")
+                        st.info(
+                            "If this shows SABR/403, set YTDLP_PO_TOKEN plus "
+                            "YTDLP_COOKIE_FILE in .env, or set "
+                            "YTDLP_COOKIES_FROM_BROWSER=firefox. "
+                            "You can also switch to Manual Selection -> Upload Audio File."
+                        )
                         st.stop()
 
                 # Voice preservation
@@ -493,9 +504,19 @@ elif st.session_state.step == 4:
                     if spotify_url:
                         with st.spinner("Downloading song..."):
                             try:
-                                a_path = download_spotify_track(spotify_url, tmp_path / "downloaded_track.mp3")
+                                a_path = download_spotify_track(
+                                    spotify_url,
+                                    tmp_path / "downloaded_track.mp3",
+                                    search_query=aud_displayname
+                                )
                             except Exception as e:
                                 st.error(f"Download failed: {str(e)}")
+                                st.info(
+                                    "If this shows SABR/403, set YTDLP_PO_TOKEN plus "
+                                    "YTDLP_COOKIE_FILE in .env, or set "
+                                    "YTDLP_COOKIES_FROM_BROWSER=firefox. "
+                                    "You can switch to Upload Audio File to skip Spotify download."
+                                )
                                 st.stop()
                     else:
                         a_path = tmp_path / aud_displayname

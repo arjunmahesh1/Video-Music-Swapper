@@ -1,14 +1,20 @@
 """Spotify integration for fetching user's liked songs and downloading tracks."""
 import os
+import shutil
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from dotenv import load_dotenv
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 
 load_dotenv()
-SPOTDL_TIMEOUT_SECONDS = 420
+SPOTDL_PRIMARY_TIMEOUT_SECONDS = 240
+SPOTDL_FALLBACK_TIMEOUT_SECONDS = 300
+YTDLP_PRIMARY_TIMEOUT_SECONDS = 120
+YTDLP_AUTH_TIMEOUT_SECONDS = 180
+SUPPORTED_AUDIO_EXTENSIONS = (".mp3", ".m4a", ".webm", ".opus", ".ogg", ".wav", ".flac")
 
 class SpotifyManager:
     def __init__(self):
@@ -312,58 +318,270 @@ class SpotifyManager:
 
         return playlists
 
-def download_spotify_track(spotify_url, output_path=None):
-    """Download a Spotify track using spotdl.
+def _download_with_ytdlp_search(search_query, output_path, cookie_file=None, browser_sources=None):
+    """Fallback downloader using direct yt-dlp search with multiple auth strategies."""
+    if browser_sources is None:
+        browser_sources = []
+
+    def _find_audio_files(run_directory):
+        candidates = []
+        for ext in SUPPORTED_AUDIO_EXTENSIONS:
+            candidates.extend(run_directory.rglob(f"*{ext}"))
+        return [p for p in candidates if p.is_file()]
+
+    ytdlp_po_token = os.getenv("YTDLP_PO_TOKEN", "").strip()
+    # Detect placeholder values that were never configured
+    if ytdlp_po_token and ("your_" in ytdlp_po_token.lower() or "xxx" in ytdlp_po_token.lower()):
+        ytdlp_po_token = ""
+    base_cmd = [
+        "yt-dlp",
+        f"ytsearch1:{search_query}",
+        "--no-playlist",
+        "--no-progress",
+        "--no-update",
+        "--restrict-filenames",
+        "--socket-timeout", "20",
+        "--retries", "2",
+        "--fragment-retries", "2",
+        "--extractor-retries", "2",
+        "--js-runtimes", "node",
+        "--extractor-args", "youtube:player_client=web,default",
+        "-x",
+        "--audio-format", "mp3",
+    ]
+
+    if ytdlp_po_token:
+        base_cmd.extend([
+            "--extractor-args", f"youtube:po_token=web+{ytdlp_po_token}"
+        ])
+
+    proxy = os.getenv("YTDLP_PROXY")
+    if proxy:
+        base_cmd.extend(["--proxy", proxy])
+
+    attempts = []
+
+    if cookie_file and Path(cookie_file).exists():
+        attempts.append({
+            "name": "yt-dlp-cookie-file",
+            "timeout": YTDLP_AUTH_TIMEOUT_SECONDS,
+            "extra": ["--cookies", cookie_file]
+        })
+
+    for browser in browser_sources:
+        attempts.append({
+            "name": f"yt-dlp-browser-{browser}",
+            "timeout": YTDLP_AUTH_TIMEOUT_SECONDS,
+            "extra": ["--cookies-from-browser", browser]
+        })
+
+    attempts.append({
+        "name": "yt-dlp-anonymous",
+        "timeout": YTDLP_PRIMARY_TIMEOUT_SECONDS,
+        "extra": []
+    })
+
+    errors = []
+
+    for attempt in attempts:
+        run_dir = output_path.parent / f".ytdlp_run_{int(time.time() * 1000)}"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        output_template = run_dir / "%(title).90s.%(ext)s"
+
+        cmd = base_cmd + attempt["extra"] + ["-o", str(output_template)]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=attempt["timeout"]
+            )
+        except subprocess.TimeoutExpired:
+            shutil.rmtree(run_dir, ignore_errors=True)
+            errors.append(f"{attempt['name']}: timed out after {attempt['timeout']}s")
+            continue
+
+        if result.returncode != 0:
+            stderr_tail = (result.stderr or "").strip()[-500:]
+            if not stderr_tail:
+                stderr_tail = "yt-dlp failed"
+            errors.append(f"{attempt['name']}: {stderr_tail}")
+            shutil.rmtree(run_dir, ignore_errors=True)
+            continue
+
+        downloaded_files = _find_audio_files(run_dir)
+        if not downloaded_files:
+            errors.append(f"{attempt['name']}: succeeded but no audio file was created")
+            shutil.rmtree(run_dir, ignore_errors=True)
+            continue
+
+        latest_file = max(downloaded_files, key=lambda p: p.stat().st_mtime)
+        shutil.move(str(latest_file), str(output_path))
+        shutil.rmtree(run_dir, ignore_errors=True)
+        return output_path
+
+    raise Exception(" | ".join(errors) if errors else "yt-dlp failed")
+
+
+def download_spotify_track(spotify_url, output_path=None, search_query=None):
+    """Download a Spotify track using yt-dlp first, then spotdl fallback.
 
     Args:
         spotify_url: Spotify track URL or URI
         output_path: Path to save the downloaded file (default: temp file)
+        search_query: Artist/title text for yt-dlp search fallback
 
     Returns:
         Path to downloaded file
     """
     if output_path is None:
-        # Create temp file
         temp_dir = tempfile.gettempdir()
         output_path = Path(temp_dir) / "spotify_track.mp3"
     else:
         output_path = Path(output_path)
 
-    # Remove existing file if it exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
         output_path.unlink()
 
-    # Download using spotdl
-    cmd = [
+    spotify_client_id = os.getenv("SPOTIPY_CLIENT_ID")
+    spotify_client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")
+    spotdl_cookie_file = os.getenv("SPOTDL_COOKIE_FILE")
+    ytdlp_cookie_file = os.getenv("YTDLP_COOKIE_FILE") or spotdl_cookie_file
+    ytdlp_po_token = os.getenv("YTDLP_PO_TOKEN", "").strip()
+    # Detect placeholder values that were never configured
+    if ytdlp_po_token and ("your_" in ytdlp_po_token.lower() or "xxx" in ytdlp_po_token.lower()):
+        ytdlp_po_token = ""
+    browsers_csv = os.getenv("YTDLP_COOKIES_FROM_BROWSER", "chrome,edge,firefox")
+    ytdlp_browser_sources = [b.strip() for b in browsers_csv.split(",") if b.strip()]
+    errors = []
+
+    def _find_audio_files(run_directory):
+        candidates = []
+        for ext in SUPPORTED_AUDIO_EXTENSIONS:
+            candidates.extend(run_directory.rglob(f"*{ext}"))
+        return [p for p in candidates if p.is_file()]
+
+    # Fast and currently more reliable path for your setup.
+    if search_query:
+        try:
+            return _download_with_ytdlp_search(
+                search_query=search_query,
+                output_path=output_path,
+                cookie_file=ytdlp_cookie_file,
+                browser_sources=ytdlp_browser_sources
+            )
+        except Exception as e:
+            errors.append(f"yt-dlp-search: {e}")
+
+    ytdlp_blocked = any(
+        token in " ".join(errors).lower()
+        for token in ["sabr", "403", "forbidden"]
+    )
+    spotdl_primary_timeout = SPOTDL_PRIMARY_TIMEOUT_SECONDS
+    spotdl_fallback_timeout = SPOTDL_FALLBACK_TIMEOUT_SECONDS
+    if ytdlp_blocked:
+        # If yt-dlp clearly hit a provider block, avoid waiting many extra minutes.
+        spotdl_primary_timeout = min(spotdl_primary_timeout, 90)
+        spotdl_fallback_timeout = min(spotdl_fallback_timeout, 120)
+
+    # Fallback: spotdl with multiple providers.
+    run_dir = output_path.parent / f".spotdl_run_{int(time.time() * 1000)}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    output_template = run_dir / "{artists} - {title}.{output-ext}"
+
+    base_cmd = [
         "spotdl",
         "download",
         spotify_url,
-        "--output", str(output_path.parent / "{artists} - {title}.{output-ext}"),
-        "--format", "mp3"
+        "--output", str(output_template),
+        "--format", "mp3",
+        "--max-retries", "1",
+        "--threads", "2",
+        "--restrict", "ascii",
+        "--print-errors",
     ]
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=SPOTDL_TIMEOUT_SECONDS
+    ytdlp_args_parts = [
+        "--no-update",
+        "--js-runtimes", "node",
+        "--extractor-args", "youtube:player_client=web,default",
+    ]
+    if ytdlp_po_token:
+        ytdlp_args_parts.extend(["--extractor-args", f"youtube:po_token=web+{ytdlp_po_token}"])
+    if ytdlp_cookie_file and Path(ytdlp_cookie_file).exists():
+        cookie_path = str(Path(ytdlp_cookie_file))
+        if " " in cookie_path:
+            cookie_path = f"\"{cookie_path}\""
+        ytdlp_args_parts.extend(["--cookies", cookie_path])
+    base_cmd.extend(["--yt-dlp-args", " ".join(ytdlp_args_parts)])
+
+    if spotify_client_id and spotify_client_secret:
+        base_cmd.extend([
+            "--client-id", spotify_client_id,
+            "--client-secret", spotify_client_secret,
+        ])
+
+    if spotdl_cookie_file and Path(spotdl_cookie_file).exists():
+        base_cmd.extend(["--cookie-file", spotdl_cookie_file])
+
+    attempt_profiles = [
+        {
+            "name": "youtube-music-first",
+            "timeout": spotdl_primary_timeout,
+            "extra_args": ["--audio", "youtube-music", "youtube"]
+        },
+        {
+            "name": "youtube-fallback",
+            "timeout": spotdl_fallback_timeout,
+            "extra_args": ["--audio", "youtube", "piped", "--dont-filter-results"]
+        },
+    ]
+
+    for profile in attempt_profiles:
+        cmd = base_cmd + profile["extra_args"]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=profile["timeout"]
+            )
+        except subprocess.TimeoutExpired:
+            errors.append(
+                f"{profile['name']}: timed out after {profile['timeout']}s"
+            )
+            continue
+
+        if result.returncode != 0:
+            stderr_tail = (result.stderr or "").strip()[-400:]
+            if not stderr_tail:
+                stderr_tail = "unknown spotdl error"
+            errors.append(f"{profile['name']}: {stderr_tail}")
+            continue
+
+        downloaded_files = _find_audio_files(run_dir)
+        if not downloaded_files:
+            stderr_tail = (result.stderr or "").strip()[-300:]
+            stdout_tail = (result.stdout or "").strip()[-300:]
+            details = stderr_tail or stdout_tail or "command succeeded but no audio file was created"
+            errors.append(f"{profile['name']}: {details}")
+            continue
+
+        latest_file = max(downloaded_files, key=lambda p: p.stat().st_mtime)
+        shutil.move(str(latest_file), str(output_path))
+        shutil.rmtree(run_dir, ignore_errors=True)
+        return output_path
+
+    shutil.rmtree(run_dir, ignore_errors=True)
+    joined_errors = " | ".join(errors) if errors else "unknown error"
+    if "sabr" in joined_errors.lower() or "403" in joined_errors.lower():
+        joined_errors += (
+            " | hint: YouTube rejected anonymous requests."
+            " Set YTDLP_PO_TOKEN and YTDLP_COOKIE_FILE in .env, or"
+            " set YTDLP_COOKIES_FROM_BROWSER=firefox and retry."
         )
-    except subprocess.TimeoutExpired:
-        raise Exception(
-            f"spotdl timed out after {SPOTDL_TIMEOUT_SECONDS}s. "
-            "This usually means the source is unavailable or network is slow."
-        )
-
-    if result.returncode != 0:
-        raise Exception(f"spotdl failed: {result.stderr}")
-
-    # Find the downloaded file (spotdl uses artist - title format)
-    downloaded_files = list(output_path.parent.glob("*.mp3"))
-    if not downloaded_files:
-        raise Exception("Download succeeded but file not found")
-
-    # Get the most recently created file
-    latest_file = max(downloaded_files, key=lambda p: p.stat().st_mtime)
-
-    return latest_file
+    raise Exception(
+        "download failed after fallback attempts. "
+        f"Details: {joined_errors}"
+    )

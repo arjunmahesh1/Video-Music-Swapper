@@ -1,6 +1,7 @@
 streamlit
 spotipy
 spotdl
+yt-dlp
 python-dotenv
 ffmpeg-python
 librosa
