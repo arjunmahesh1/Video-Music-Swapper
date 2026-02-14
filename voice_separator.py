@@ -3,15 +3,18 @@ import subprocess
 import tempfile
 from pathlib import Path
 import shutil
-import sys
 import os
 import re
+import time
+import gc
 import numpy as np
 import torch
 import librosa
 from scipy.io import wavfile
 from scipy.signal import butter, sosfiltfilt
-from faster_whisper import WhisperModel
+
+os.environ.setdefault("NUMBA_CACHE_DIR", str(Path(tempfile.gettempdir()) / "numba_cache"))
+os.environ.setdefault("NUMBA_NUM_THREADS", "1")
 
 
 # Models to try in order of memory efficiency (quantized = smaller)
@@ -30,42 +33,157 @@ MAX_SEGMENTS_FOR_EXPRESSION = 260
 DISABLE_FASTER_WHISPER = False
 
 
-def _find_demucs_stem_file(model_output, stem_base_name):
-    """Return demucs stem path for either mp3 or wav output."""
-    for ext in ("mp3", "wav"):
-        candidate = model_output / f"{stem_base_name}.{ext}"
-        if candidate.exists():
-            return candidate
-    return None
-
-
 def _segment_size_for_model(model_id, duration_seconds=None, has_cuda=False):
     """Pick a safe demucs segment size for the specific model."""
     # htdemucs has a hard maximum ~7.8s; keep under that.
     if "htdemucs" in model_id:
-        return "7.5"
+        return "7"     
 
     if has_cuda:
-        return "20"
-
-    if duration_seconds and duration_seconds <= 120:
         return "12"
 
-    return "10"
+    if duration_seconds and duration_seconds <= 120:
+        return "8"
+
+    return "6"
+
+
+def _save_tensor_as_wav(audio_tensor, sample_rate, output_path):
+    """Save torch tensor audio to WAV without torchaudio/torchcodec."""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    audio_np = audio_tensor.detach().cpu().numpy()
+    if audio_np.ndim == 2:
+        # Demucs tensors are [channels, samples]; scipy expects [samples, channels].
+        audio_np = np.transpose(audio_np, (1, 0))
+
+    audio_np = np.clip(audio_np, -1.0, 1.0)
+    audio_i16 = np.int16(audio_np * 32767)
+    wavfile.write(str(output_path), sample_rate, audio_i16)
+
+
+def _load_demucs_model(model_id, device):
+    """Load Demucs model for current run (no long-lived cache)."""
+    from demucs.pretrained import get_model
+    model = get_model(model_id)
+    model.to(device)
+    model.eval()
+    return model
+
+
+def _separate_audio_with_demucs_api(audio_path, output_dir, model_id, duration_seconds=None):
+    """Run Demucs in-process and save stems via scipy to avoid torchcodec save issues."""
+    from demucs.apply import apply_model
+    from demucs.audio import AudioFile
+
+    has_cuda = torch.cuda.is_available()
+    device = torch.device("cuda" if has_cuda else "cpu")
+    segment_size = float(
+        _segment_size_for_model(
+            model_id,
+            duration_seconds=duration_seconds,
+            has_cuda=has_cuda
+        )
+    )
+
+    start = time.time()
+    model = None
+    wav = None
+    mix = None
+    sources = None
+
+    try:
+        model = _load_demucs_model(model_id, device)
+        wav = AudioFile(str(audio_path)).read(
+            streams=0,
+            samplerate=model.samplerate,
+            channels=model.audio_channels
+        )
+        mix = wav.to(device)
+
+        with torch.no_grad():
+            sources = apply_model(
+                model,
+                mix[None],
+                shifts=1 if has_cuda else 0,   # speed on CPU, mild quality boost on GPU
+                split=True,
+                overlap=0.25,
+                progress=False,
+                device=device,
+                num_workers=0,
+                segment=segment_size
+            )[0].cpu()
+
+        source_names = list(model.sources)
+        if "vocals" not in source_names:
+            raise Exception(f"Model {model_id} output has no vocals stem: {source_names}")
+
+        vocals_idx = source_names.index("vocals")
+        vocals = sources[vocals_idx]
+        non_vocal_indices = [i for i, name in enumerate(source_names) if name != "vocals"]
+        if non_vocal_indices:
+            music = sources[non_vocal_indices].sum(dim=0)
+        else:
+            music = torch.zeros_like(vocals)
+
+        stem_name = Path(audio_path).stem
+        model_output = Path(output_dir) / model_id / stem_name
+        vocals_path = model_output / "vocals.wav"
+        music_path = model_output / "no_vocals.wav"
+
+        _save_tensor_as_wav(vocals, model.samplerate, vocals_path)
+        _save_tensor_as_wav(music, model.samplerate, music_path)
+
+        elapsed = time.time() - start
+        print(f"Demucs API separation using {model_id} finished in {elapsed:.1f}s")
+        return vocals_path, music_path
+    finally:
+        # Keep memory stable across repeated Streamlit reruns.
+        del sources
+        del mix
+        del wav
+        del model
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+
+def _models_for_current_run(model=None):
+    """Pick safe default model list based on available memory budget."""
+    if model:
+        return [(model, model)]
+
+    if torch.cuda.is_available():
+        return DEMUCS_MODELS
+
+    # CPU-only default: skip heavier models to reduce OOM and latency.
+    heavy_opt_in = os.getenv("DEMUCS_ENABLE_HEAVY_MODELS", "0").strip().lower() in {"1", "true", "yes"}
+    return DEMUCS_MODELS if heavy_opt_in else DEMUCS_MODELS[:2]
 
 
 def _run_checked(cmd, timeout=None, env=None, step_name="Command"):
     """Run subprocess and raise a detailed exception on failure."""
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env
-        )
-    except subprocess.TimeoutExpired:
-        raise Exception(f"{step_name} timed out after {timeout}s")
+    max_attempts = 2
+    for attempt in range(max_attempts):
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env
+            )
+            break
+        except subprocess.TimeoutExpired:
+            raise Exception(f"{step_name} timed out after {timeout}s")
+        except OSError as e:
+            if getattr(e, "winerror", None) == 1450 and attempt < max_attempts - 1:
+                print(f"{step_name}: low system resources, retrying once...")
+                gc.collect()
+                time.sleep(1.0)
+                continue
+            raise Exception(f"{step_name} failed to start process: {e}")
 
     if result.returncode != 0:
         stderr = (result.stderr or "").strip()
@@ -73,6 +191,26 @@ def _run_checked(cmd, timeout=None, env=None, step_name="Command"):
         details = stderr if stderr else stdout
         raise Exception(f"{step_name} failed: {details}")
     return result
+
+
+def _debleed_with_ffmpeg_sidechain(vocals_path, accompaniment_path, output_path, timeout=300):
+    """Low-resource de-bleed fallback using ffmpeg sidechain compression."""
+    filter_complex = (
+        "[0:a][1:a]sidechaincompress="
+        "threshold=0.010:ratio=10:attack=4:release=220,"
+        "highpass=f=95,lowpass=f=6500,"
+        "agate=threshold=0.004:ratio=1.6:attack=4:release=260:range=0.25"
+        "[out]"
+    )
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(vocals_path),
+        "-i", str(accompaniment_path),
+        "-filter_complex", filter_complex,
+        "-map", "[out]",
+        str(output_path)
+    ]
+    _run_checked(cmd, timeout=timeout, step_name="FFmpeg de-bleed fallback")
 
 
 def _probe_duration_seconds(audio_path):
@@ -267,120 +405,44 @@ def separate_audio(audio_path, output_dir=None, model=None):
 
     duration_seconds = _probe_duration_seconds(audio_path)
 
-    # Use the same Python executable that's running this script
-    python_exe = sys.executable
-
-    # Set environment variables
-    env = os.environ.copy()
-
     # Check if CUDA GPU is available
     if torch.cuda.is_available():
         print(f"GPU detected: {torch.cuda.get_device_name(0)} - using GPU acceleration")
-        env["PYTORCH_NO_CUDA_MEMORY_CACHING"] = "1"  # Reduce GPU memory caching
-        # Don't set CUDA_VISIBLE_DEVICES - let it use GPU
     else:
         print("No GPU detected - using CPU (slower)")
-        env["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU-only mode
+        # Restrict thread fan-out to avoid CPU-memory spikes on Windows.
+        try:
+            torch.set_num_threads(max(1, min(4, (os.cpu_count() or 4) // 2)))
+            torch.set_num_interop_threads(1)
+        except Exception:
+            pass
 
-    # If specific model requested, only try that one
-    models_to_try = [(model, model)] if model else DEMUCS_MODELS
+    print("Demucs backend: in-process API (low-memory mode)")
+
+    models_to_try = _models_for_current_run(model=model)
+    if not torch.cuda.is_available() and len(models_to_try) < len(DEMUCS_MODELS):
+        print("CPU mode: trying compact Demucs models first (set DEMUCS_ENABLE_HEAVY_MODELS=1 to include all).")
 
     last_error = None
     for model_name, model_id in models_to_try:
         print(f"Trying Demucs model: {model_name}...")
-        print(f"Using Python: {python_exe}")
-
-        # Build command - segment size balances memory vs speed.
-        # Model-specific cap is required for htdemucs (max ~7.8s).
-        segment_size = _segment_size_for_model(
-            model_id,
-            duration_seconds=duration_seconds,
-            has_cuda=torch.cuda.is_available()
-        )
-
-        cmd = [
-            python_exe, "-m", "demucs",
-            "-v",                     # Verbose output
-            "-n", model_id,           # Specify model
-            "--two-stems=vocals",     # Only separate vocals/accompaniment
-            "--segment", segment_size,
-            "--mp3",                  # Avoid wav save path that requires torchcodec
-            "--mp3-bitrate", "320",
-            "--mp3-preset", "4",
-            "-o", str(output_dir),
-            str(audio_path)
-        ]
-
-        print(f"Running: {' '.join(cmd)}")
-
-        # Run with real-time output to see what's happening
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=env
-        )
-
-        # Dynamic timeout based on duration (capped to keep app responsive).
-        if duration_seconds:
-            demucs_timeout = int(min(900, max(240, duration_seconds * 2.5)))
-        else:
-            demucs_timeout = 600
-
         try:
-            stdout_data, stderr_data = process.communicate(timeout=demucs_timeout)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            stdout_data, stderr_data = process.communicate()
-            raise Exception(
-                f"Demucs timed out after {demucs_timeout}s."
-                " Try a shorter clip or disable voice preservation."
+            vocals_path, music_path = _separate_audio_with_demucs_api(
+                audio_path=audio_path,
+                output_dir=output_dir,
+                model_id=model_id,
+                duration_seconds=duration_seconds
             )
-
-        # Create a result-like object
-        class Result:
-            pass
-        result = Result()
-        result.returncode = process.returncode
-        result.stdout = stdout_data
-        result.stderr = stderr_data
-
-        # Combine stdout and stderr for full error context
-        full_output = f"STDOUT: {result.stdout}\nSTDERR: {result.stderr}"
-
-        if result.returncode == 0:
-            # Success! Find the output files
-            stem_name = audio_path.stem
-            model_output = output_dir / model_id / stem_name
-
-            vocals_path = _find_demucs_stem_file(model_output, "vocals")
-            music_path = _find_demucs_stem_file(model_output, "no_vocals")
-
-            if vocals_path and music_path:
-                print(f"Separation complete using {model_name}!")
-                return {
-                    'vocals': vocals_path,
-                    'music': music_path,
-                    'model_used': model_name
-                }
-            else:
-                last_error = f"Output files not found at {model_output}"
-                print(f"Warning: {last_error}")
-        else:
-            # Capture full error from both streams
-            last_error = full_output
-            print(f"Model {model_name} failed.")
-            print(f"=== FULL OUTPUT ===")
-            print(full_output)
-            print(f"=== END OUTPUT ===")
-
-            # Check if it's a memory error - if so, try next model
-            combined_lower = full_output.lower()
-            if "paging file" in combined_lower or "out of memory" in combined_lower or "memoryerror" in combined_lower:
-                print("Memory error detected, trying lighter model...")
-                continue
-            # For other errors, also try next model
+            print(f"Separation complete using {model_name}!")
+            return {
+                'vocals': vocals_path,
+                'music': music_path,
+                'model_used': model_name
+            }
+        except Exception as e:
+            last_error = str(e)
+            print(f"Model {model_name} failed: {e}")
+            # Try the next model if available.
             continue
 
     # All models failed
@@ -618,6 +680,7 @@ def detect_speech_segments(vocals_path, accompaniment_path=None):
     )
 
     try:
+        from faster_whisper import WhisperModel
         try:
             model = WhisperModel(
                 whisper_model_name,
@@ -993,7 +1056,7 @@ def extract_speech_only(vocals_path, output_path):
 
 def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
                                    vocals_volume=1.0, music_volume=0.8,
-                                   gate_threshold=0.012, process_timeout=600):
+                                   gate_threshold=0.006, process_timeout=600):
     """Mix vocals with new music using sidechain ducking and noise gate.
 
     The music volume automatically ducks (lowers) when voice is detected,
@@ -1016,17 +1079,18 @@ def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
     output_path = Path(output_path)
 
     filter_complex = (
-        # Speech-focused filtering + gate to suppress residual singing/music.
-        f"[0:a]highpass=f=120,lowpass=f=5000,"
-        f"agate=threshold={gate_threshold}:ratio=3:attack=1:release=220:range=0.09,"
+        # Preserve full narration while suppressing low-level residual bleed.
+        f"[0:a]highpass=f=100,lowpass=f=5600,"
+        f"agate=threshold={gate_threshold}:ratio=2:attack=4:release=320:range=0.18,"
+        f"acompressor=threshold=0.075:ratio=2.5:attack=5:release=120:makeup=2,"
         f"volume={vocals_volume}[voice];"
         f"[1:a]volume={music_volume}[music_raw];"
-        # Aggressive sidechain so music ducks clearly under voiceover.
+        # Strong sidechain so new music stays clearly under voiceover.
         f"[music_raw][voice]sidechaincompress="
-        f"threshold=0.015:"
-        f"ratio=8:"
-        f"attack=20:"
-        f"release=350:"
+        f"threshold=0.010:"
+        f"ratio=9:"
+        f"attack=12:"
+        f"release=420:"
         f"makeup=1"
         f"[music_ducked];"
         # Mix and limit final peaks.
@@ -1130,10 +1194,9 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
 
     # Speech-focused cleanup to suppress residual music bleed from separation.
     preprocess_filter = (
-        "highpass=f=110,"
-        "lowpass=f=5200,"
-        "afftdn=nf=-28:nt=w,"
-        "agate=threshold=0.028:ratio=6:attack=3:release=120:range=0.02"
+        "highpass=f=95,"
+        "lowpass=f=6500,"
+        "afftdn=nf=-26:nt=w"
     )
 
     cmd = [
@@ -1148,9 +1211,8 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
     except Exception as e:
         print(f"Warning: Advanced vocal cleanup failed ({e}), retrying with compatibility filter")
         compatibility_filter = (
-            "highpass=f=110,"
-            "lowpass=f=5200,"
-            "agate=threshold=0.03:ratio=6:attack=3:release=120:range=0.02"
+            "highpass=f=95,"
+            "lowpass=f=6500"
         )
         fallback_cmd = [
             "ffmpeg", "-y",
@@ -1175,7 +1237,21 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         )
         speech_source_path = debleed_vocals_path
     except Exception as e:
-        print(f"Warning: Music bleed suppression failed ({e}); continuing with cleaned vocals.")
+        print(f"Warning: Music bleed suppression failed ({e}); trying ffmpeg fallback.")
+        try:
+            _debleed_with_ffmpeg_sidechain(
+                cleaned_vocals_path,
+                separated['music'],
+                debleed_vocals_path,
+                timeout=ffmpeg_timeout
+            )
+            speech_source_path = debleed_vocals_path
+            print("Applied ffmpeg de-bleed fallback.")
+        except Exception as fallback_error:
+            print(
+                f"Warning: FFmpeg de-bleed fallback failed ({fallback_error}); "
+                "continuing with cleaned vocals."
+            )
 
     # Step 2: Detect ONLY voiceover segments (not singing)
     print("Step 2: Detecting voiceover segments...")
@@ -1193,6 +1269,9 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
             "using full-track speech-gate fallback to avoid dropping narration."
         )
         force_full_track_gate = True
+    elif DISABLE_FASTER_WHISPER:
+        print("ASR unavailable in this environment; using full-track continuity mode.")
+        force_full_track_gate = True
 
     # Step 3: Extract voiceover using detected segments
     print("Step 3: Extracting voiceover segments...")
@@ -1204,8 +1283,9 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
             "using aggressive full-track speech gate fallback."
         )
         fallback_filter = (
-            "highpass=f=110,lowpass=f=5200,"
-            "agate=threshold=0.008:ratio=2:attack=2:release=260:range=0.10"
+            "highpass=f=95,lowpass=f=6500,"
+            "agate=threshold=0.004:ratio=1.7:attack=5:release=360:range=0.25,"
+            "acompressor=threshold=0.08:ratio=2.2:attack=6:release=130:makeup=2"
         )
         cmd = [
             "ffmpeg", "-y",
@@ -1221,8 +1301,8 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         speech_mask_filter = (
             f"volume=enable='{enable_expr}':volume=1,"
             f"volume=enable='not({enable_expr})':volume=0,"
-            "highpass=f=110,lowpass=f=5200,"
-            "agate=threshold=0.014:ratio=3:attack=2:release=220:range=0.10"
+            "highpass=f=95,lowpass=f=6500,"
+            "agate=threshold=0.008:ratio=2:attack=3:release=280:range=0.18"
         )
         cmd = [
             "ffmpeg", "-y",
@@ -1241,13 +1321,27 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
             clean_voiceover_path,
             separated['music'],
             final_voiceover_path,
-            suppression_strength=1.60,
-            residual_floor=0.03,
+            suppression_strength=1.50,
+            residual_floor=0.05,
             sr=32000
         )
         mix_voice_source = final_voiceover_path
     except Exception as e:
-        print(f"Warning: Final de-bleed pass failed ({e}); using pre-final voiceover track.")
+        print(f"Warning: Final de-bleed pass failed ({e}); trying ffmpeg fallback.")
+        try:
+            _debleed_with_ffmpeg_sidechain(
+                clean_voiceover_path,
+                separated['music'],
+                final_voiceover_path,
+                timeout=ffmpeg_timeout
+            )
+            mix_voice_source = final_voiceover_path
+            print("Applied final ffmpeg de-bleed fallback.")
+        except Exception as fallback_error:
+            print(
+                f"Warning: Final ffmpeg de-bleed fallback failed ({fallback_error}); "
+                "using pre-final voiceover track."
+            )
 
     # Step 3.5: Detect and skip long instrumental intros (e.g., Pink Floyd)
     intro_skip = detect_song_start(new_music_path)
