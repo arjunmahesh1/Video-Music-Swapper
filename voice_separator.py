@@ -31,6 +31,7 @@ ISOLATED_BURST_GAP_SECONDS = 0.70
 MAX_SEGMENTS_BEFORE_CONSOLIDATION = 180
 MAX_SEGMENTS_FOR_EXPRESSION = 260
 DISABLE_FASTER_WHISPER = False
+TIMESTAMP_PATTERN = re.compile(r"(?<!\d)(\d{1,2}:\d{2}(?::\d{2})?)(?!\d)")
 
 
 def _segment_size_for_model(model_id, duration_seconds=None, has_cuda=False):
@@ -304,7 +305,8 @@ def suppress_music_bleed_with_reference(
     output_path,
     suppression_strength=1.25,
     residual_floor=0.06,
-    sr=32000
+    sr=32000,
+    speech_high_cut_hz=7800
 ):
     """Suppress residual original music in vocals using accompaniment reference."""
     vocals_path = Path(vocals_path)
@@ -340,7 +342,7 @@ def suppress_music_bleed_with_reference(
 
     # Emphasize speech band and attenuate out-of-band residual music.
     freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-    speech_band = (freqs >= 120) & (freqs <= 5200)
+    speech_band = (freqs >= 120) & (freqs <= speech_high_cut_hz)
     band_weights = np.where(speech_band, 1.0, 0.42).astype(np.float32)[:, None]
     mask *= band_weights
 
@@ -366,7 +368,7 @@ def suppress_music_bleed_with_reference(
 
     # Final bandpass in time domain for voiceover intelligibility.
     low_cut = 120.0
-    high_cut = min(5200.0, sr * 0.45)
+    high_cut = min(float(speech_high_cut_hz), sr * 0.45)
     if high_cut > low_cut + 50:
         sos = butter(6, [low_cut / (sr * 0.5), high_cut / (sr * 0.5)], btype="bandpass", output="sos")
         enhanced = sosfiltfilt(sos, enhanced)
@@ -655,11 +657,160 @@ def _finalize_speech_segments(raw_segments):
     return padded_segments
 
 
+def _parse_version_tuple(version_text):
+    """Parse version string into comparable integer tuple."""
+    nums = re.findall(r"\d+", str(version_text or ""))
+    if not nums:
+        return (0,)
+    return tuple(int(n) for n in nums[:3])
+
+
+def _is_faster_whisper_environment_compatible():
+    """Check local dependency compatibility before loading faster-whisper."""
+    try:
+        import huggingface_hub
+        current = _parse_version_tuple(getattr(huggingface_hub, "__version__", "0"))
+        required = (0, 23, 0)
+        if current < required:
+            return False, (
+                f"huggingface_hub {getattr(huggingface_hub, '__version__', '?')} is too old; "
+                f"need >= {'.'.join(map(str, required))}"
+            )
+        return True, ""
+    except Exception as e:
+        return False, f"dependency check failed: {e}"
+
+
+def _parse_timestamp_seconds(token):
+    """Parse mm:ss or hh:mm:ss into float seconds."""
+    token = token.strip()
+    if not token:
+        return None
+    parts = token.split(":")
+    if len(parts) == 2:
+        mm, ss = parts
+        if mm.isdigit() and ss.isdigit():
+            return int(mm) * 60 + int(ss)
+    elif len(parts) == 3:
+        hh, mm, ss = parts
+        if hh.isdigit() and mm.isdigit() and ss.isdigit():
+            return int(hh) * 3600 + int(mm) * 60 + int(ss)
+    return None
+
+
+def parse_transcript_speech_segments(transcript_hint_text, duration_seconds=None):
+    """Build speech windows from a timestamped transcript.
+
+    Accepts common formats:
+    - `0:05 text...`
+    - `text...` then next line `0:05`
+    """
+    if not transcript_hint_text:
+        return []
+
+    raw_lines = [ln.strip() for ln in str(transcript_hint_text).splitlines() if ln.strip()]
+    if not raw_lines:
+        return []
+
+    used_line_idx = set()
+    pairs = []
+
+    # First pass: inline timestamp + text on the same line.
+    for i, line in enumerate(raw_lines):
+        ts_match = TIMESTAMP_PATTERN.search(line)
+        if not ts_match:
+            continue
+        ts_text = ts_match.group(1)
+        ts = _parse_timestamp_seconds(ts_text)
+        if ts is None:
+            continue
+
+        before = line[:ts_match.start()].strip(" -\t")
+        after = line[ts_match.end():].strip(" -\t")
+        text = after if after else before
+        if text:
+            pairs.append((float(ts), text))
+            used_line_idx.add(i)
+
+    # Second pass: timestamp-only line paired with nearby text line.
+    for i, line in enumerate(raw_lines):
+        if i in used_line_idx:
+            continue
+
+        ts = _parse_timestamp_seconds(line)
+        if ts is None:
+            continue
+
+        text = ""
+        # Prefer previous line (matches common copied YouTube transcript format).
+        if i - 1 >= 0 and (i - 1) not in used_line_idx:
+            prev = raw_lines[i - 1]
+            if _parse_timestamp_seconds(prev) is None and not TIMESTAMP_PATTERN.search(prev):
+                text = prev
+                used_line_idx.add(i - 1)
+        if not text and i + 1 < len(raw_lines) and (i + 1) not in used_line_idx:
+            nxt = raw_lines[i + 1]
+            if _parse_timestamp_seconds(nxt) is None and not TIMESTAMP_PATTERN.search(nxt):
+                text = nxt
+                used_line_idx.add(i + 1)
+
+        if text:
+            pairs.append((float(ts), text))
+            used_line_idx.add(i)
+
+    if not pairs:
+        return []
+
+    # Sort by timestamp and de-duplicate near-identical entries.
+    pairs.sort(key=lambda x: x[0])
+    dedup = []
+    for ts, txt in pairs:
+        if dedup and abs(ts - dedup[-1][0]) < 0.02:
+            # Keep longer textual line for same timestamp.
+            if len(txt) > len(dedup[-1][1]):
+                dedup[-1] = (ts, txt)
+        else:
+            dedup.append((ts, txt))
+
+    segments = []
+    for idx, (start_ts, txt) in enumerate(dedup):
+        word_count = max(1, len(re.findall(r"[A-Za-z']+", txt)))
+        estimated = min(3.2, max(0.55, 0.28 * word_count))
+
+        if idx + 1 < len(dedup):
+            next_ts = dedup[idx + 1][0]
+            max_allowed = max(start_ts + 0.25, next_ts - 0.05)
+            end_ts = min(max_allowed, start_ts + estimated)
+            end_ts = max(start_ts + 0.25, end_ts)
+        else:
+            # Last segment: estimate duration from text length.
+            end_ts = start_ts + estimated
+            if duration_seconds is not None:
+                end_ts = min(end_ts, float(duration_seconds))
+
+        start = max(0.0, start_ts - 0.01)
+        if duration_seconds is not None:
+            start = min(start, float(duration_seconds))
+        end = max(start + 0.25, end_ts)
+        if duration_seconds is not None:
+            end = min(end, float(duration_seconds))
+        if end > start + 0.08:
+            segments.append((start, end))
+
+    return sorted(segments, key=lambda x: x[0])
+
+
 def detect_speech_segments(vocals_path, accompaniment_path=None):
     """Detect speech windows while filtering out singing/music bleed."""
     global DISABLE_FASTER_WHISPER
     vocals_path = Path(vocals_path)
     duration_seconds = _probe_duration_seconds(vocals_path)
+
+    if not DISABLE_FASTER_WHISPER:
+        fw_ok, fw_reason = _is_faster_whisper_environment_compatible()
+        if not fw_ok:
+            DISABLE_FASTER_WHISPER = True
+            print(f"Skipping faster-whisper ({fw_reason})")
 
     if DISABLE_FASTER_WHISPER:
         print("Skipping faster-whisper (disabled due previous environment error).")
@@ -851,6 +1002,159 @@ def detect_speech_segments(vocals_path, accompaniment_path=None):
     return speech_segments
 
 
+def _derive_speech_segments_acoustic(vocals_path, accompaniment_path=None, duration=None):
+    """Derive speech windows from acoustic features only (no ASR)."""
+    try:
+        vocals_audio, sr = librosa.load(str(vocals_path), sr=16000, mono=True)
+    except Exception as e:
+        print(f"Warning: Acoustic speech masking could not load vocals: {e}")
+        return []
+
+    if len(vocals_audio) < int(0.25 * sr):
+        return []
+
+    accompaniment_audio = None
+    if accompaniment_path and Path(accompaniment_path).exists():
+        try:
+            accompaniment_audio, _ = librosa.load(str(accompaniment_path), sr=16000, mono=True)
+        except Exception:
+            accompaniment_audio = None
+
+    n = len(vocals_audio)
+    if accompaniment_audio is not None:
+        if len(accompaniment_audio) < n:
+            accompaniment_audio = np.pad(accompaniment_audio, (0, n - len(accompaniment_audio)))
+        accompaniment_audio = accompaniment_audio[:n]
+
+    # Residual suppresses background bed and keeps speech prominence.
+    residual = vocals_audio.copy()
+    if accompaniment_audio is not None:
+        residual = residual - 0.92 * accompaniment_audio
+
+    # Speech band emphasis.
+    try:
+        sos = butter(4, [100 / (sr * 0.5), 5000 / (sr * 0.5)], btype="bandpass", output="sos")
+        residual = sosfiltfilt(sos, residual)
+    except Exception:
+        pass
+
+    hop = int(0.01 * sr)   # 10 ms
+    frame = int(0.03 * sr) # 30 ms
+    if hop < 1 or frame <= hop:
+        return []
+
+    rms_v = librosa.feature.rms(y=vocals_audio, frame_length=frame, hop_length=hop)[0]
+    rms_r = librosa.feature.rms(y=residual, frame_length=frame, hop_length=hop)[0]
+    if accompaniment_audio is not None:
+        rms_a = librosa.feature.rms(y=accompaniment_audio, frame_length=frame, hop_length=hop)[0]
+    else:
+        rms_a = np.zeros_like(rms_v)
+
+    stft = librosa.stft(residual, n_fft=512, hop_length=hop, win_length=frame)
+    mag = np.abs(stft) + 1e-9
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=512)
+    speech_band = (freqs >= 120) & (freqs <= 4600)
+    band_ratio = np.sum(mag[speech_band], axis=0) / np.sum(mag, axis=0)
+    peakiness = np.max(mag, axis=0) / np.mean(mag, axis=0)
+
+    # Align array lengths.
+    k = min(len(rms_v), len(rms_r), len(rms_a), len(band_ratio), len(peakiness))
+    rms_v = rms_v[:k]
+    rms_r = rms_r[:k]
+    rms_a = rms_a[:k]
+    band_ratio = band_ratio[:k]
+    peakiness = peakiness[:k]
+
+    db = 20 * np.log10(rms_r + 1e-9)
+    p25, p85 = np.percentile(db, [25, 85])
+    norm_db = np.clip((db - p25) / (p85 - p25 + 1e-6), 0.0, 1.0)
+
+    modulation = np.abs(np.diff(np.r_[db[0], db]))
+    mod_norm = np.clip(modulation / 6.0, 0.0, 1.0)
+    music_ratio = rms_a / (rms_v + 1e-8)
+    music_pen = np.clip((music_ratio - 0.55) / 1.2, 0.0, 1.0)
+    tonal_pen = np.clip((peakiness - 6.0) / 8.0, 0.0, 1.0)
+
+    score = (
+        0.52 * norm_db
+        + 0.34 * band_ratio
+        + 0.20 * mod_norm
+        - 0.22 * music_pen
+        - 0.20 * tonal_pen
+    )
+    score = np.clip(score, 0.0, 1.0)
+    score = np.convolve(score, np.array([0.2, 0.6, 0.2], dtype=np.float32), mode="same")
+
+    hi = max(0.38, float(np.percentile(score, 65)))
+    lo = max(0.24, hi - 0.18)
+
+    # Hysteresis mask for stable speech windows.
+    segments = []
+    active = False
+    seg_start = 0
+    for i, s in enumerate(score):
+        if not active and s >= hi:
+            active = True
+            seg_start = i
+        elif active and s < lo:
+            active = False
+            seg_end = i
+            start_t = seg_start * hop / sr
+            end_t = seg_end * hop / sr
+            if end_t - start_t >= 0.18:
+                segments.append((start_t, end_t))
+    if active:
+        start_t = seg_start * hop / sr
+        end_t = k * hop / sr
+        if end_t - start_t >= 0.18:
+            segments.append((start_t, end_t))
+
+    # Merge small pauses and pad phrase edges.
+    segments = _merge_segments(segments, max_gap=0.36)
+    padded = []
+    max_dur = duration if duration is not None else (len(vocals_audio) / sr)
+    for s, e in segments:
+        s2 = max(0.0, s - 0.14)
+        e2 = min(max_dur, e + 0.16)
+        if e2 - s2 >= 0.14:
+            padded.append((s2, e2))
+    segments = padded
+
+    # Short-burst cleanup: remove likely singing ad-libs.
+    final_segments = []
+    for s, e in segments:
+        seg_dur = e - s
+        a = max(0, int(s * sr))
+        b = min(len(vocals_audio), int(e * sr))
+        if b <= a:
+            continue
+        seg_audio = vocals_audio[a:b]
+
+        if accompaniment_audio is not None:
+            acc_seg = accompaniment_audio[a:b]
+            v_rms = float(np.sqrt(np.mean(seg_audio ** 2) + 1e-12))
+            a_rms = float(np.sqrt(np.mean(acc_seg ** 2) + 1e-12))
+            ratio = a_rms / (v_rms + 1e-8)
+            # Keep narration, reject only very short music-dominant bursts.
+            if seg_dur < 0.45 and ratio > 0.90:
+                if is_singing_not_speech(seg_audio, sr=sr, segment_duration=seg_dur):
+                    continue
+
+        final_segments.append((s, e))
+
+    finalized = _finalize_speech_segments(final_segments)
+    # Minimum coverage safeguard for spoken ads when ASR is unavailable.
+    total = sum(e - s for s, e in finalized)
+    max_dur = duration if duration is not None else (len(vocals_audio) / sr)
+    if max_dur > 0 and total < max_dur * 0.12 and len(finalized) <= 3:
+        expanded = []
+        for s, e in finalized:
+            expanded.append((max(0.0, s - 0.25), min(max_dur, e + 0.35)))
+        if expanded:
+            finalized = _merge_segments(expanded, max_gap=0.45)
+    return finalized
+
+
 def _detect_speech_segments_fallback_vad(vocals_path, accompaniment_path=None, asr_failed=False):
     """Fallback speech detection using silence detection.
 
@@ -940,10 +1244,6 @@ def _detect_speech_segments_fallback_vad(vocals_path, accompaniment_path=None, a
             if len(vocal_segment) < int(0.08 * sr):
                 continue
 
-            # Drop short segments that look like singing/ad-libs.
-            if seg_dur < 1.0 and is_singing_not_speech(vocal_segment, sr=sr, segment_duration=seg_dur):
-                continue
-
             if accompaniment_audio is not None and end_sample <= len(accompaniment_audio):
                 acc_segment = accompaniment_audio[start_sample:end_sample]
                 vocal_energy = float(np.sqrt(np.mean(vocal_segment ** 2)))
@@ -951,9 +1251,10 @@ def _detect_speech_segments_fallback_vad(vocals_path, accompaniment_path=None, a
                 if vocal_energy > 1e-7:
                     music_ratio = acc_energy / vocal_energy
 
-                    # Aggressive for short bursts, conservative for narration.
-                    if (seg_dur < 1.2 and music_ratio > 0.35) or (seg_dur >= 1.2 and music_ratio > 0.95):
-                        continue
+                    # Reject only very short, heavily music-dominant bursts.
+                    if seg_dur < 0.45 and music_ratio > 0.95:
+                        if is_singing_not_speech(vocal_segment, sr=sr, segment_duration=seg_dur):
+                            continue
 
             filtered_segments.append((s, e))
     except Exception as e:
@@ -968,15 +1269,38 @@ def _detect_speech_segments_fallback_vad(vocals_path, accompaniment_path=None, a
     if asr_failed and (len(speech_segments) <= 1 or total_speech < max(2.0, duration * 0.06)):
         print(
             "Fallback VAD produced low-confidence speech coverage; "
-            "using full-track speech window to preserve narration."
+            "trying acoustic speech-mask refinement."
         )
-        speech_segments = [(0.0, duration)]
+        refined = _derive_speech_segments_acoustic(
+            vocals_path,
+            accompaniment_path=accompaniment_path,
+            duration=duration
+        )
+        if refined:
+            speech_segments = refined
 
-    # If ASR is unavailable in this environment, prefer continuity over strict gating.
-    # We rely on de-bleed + gentle gates to remove music burps instead of cutting phrases.
-    if asr_failed:
-        print("ASR unavailable: using full-track speech coverage for continuity.")
-        speech_segments = [(0.0, duration)]
+    # Overly-broad fallback windows leak song vocals; refine when needed.
+    total_speech = sum(e - s for s, e in speech_segments) if speech_segments else 0.0
+    if asr_failed and speech_segments and total_speech > duration * 0.80:
+        print("Fallback windows cover most of track; applying acoustic refinement.")
+        refined = _derive_speech_segments_acoustic(
+            vocals_path,
+            accompaniment_path=accompaniment_path,
+            duration=duration
+        )
+        if refined:
+            speech_segments = refined
+
+    # Final safety fallback: avoid hard failure, but do not default to full-track.
+    if not speech_segments:
+        print("No fallback speech windows survived; using non-silent windows as safety fallback.")
+        speech_segments = _merge_segments(all_segments, max_gap=0.45)
+        padded = []
+        for s, e in speech_segments:
+            if e - s < 0.18:
+                continue
+            padded.append((max(0.0, s - 0.10), min(duration, e + 0.10)))
+        speech_segments = padded if padded else [(0.0, min(duration, 3.0))]
 
     print(f"Fallback: Detected {len(all_segments)} segments, filtered to {len(speech_segments)}")
     return speech_segments
@@ -1056,8 +1380,8 @@ def extract_speech_only(vocals_path, output_path):
 
 def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
                                    vocals_volume=1.0, music_volume=0.8,
-                                   gate_threshold=0.004, process_timeout=600,
-                                   voice_lowpass_hz=7600,
+                                   gate_threshold=0.0028, process_timeout=600,
+                                   voice_lowpass_hz=9800,
                                    sidechain_threshold=0.012,
                                    sidechain_ratio=7.0,
                                    output_makeup=1.2):
@@ -1089,8 +1413,8 @@ def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
     filter_complex = (
         # Voice path: preserve speech continuity, reduce bleed, avoid muffling.
         f"[0:a]highpass=f=90,lowpass=f={voice_lowpass_hz},"
-        f"agate=threshold={gate_threshold}:ratio=1.6:attack=5:release=360:range=0.30,"
-        f"acompressor=threshold=0.090:ratio=2.0:attack=8:release=160:makeup=2.4,"
+        f"agate=threshold={gate_threshold}:ratio=1.22:attack=7:release=440:range=0.70,"
+        f"acompressor=threshold=0.105:ratio=1.75:attack=10:release=190:makeup=2.6,"
         f"volume={vocals_volume}[voice];"
         f"[1:a]volume={music_volume}[music_raw];"
         # Sidechain keeps replacement music under narration while avoiding pumping.
@@ -1263,6 +1587,38 @@ def _apply_post_gain_limiter(input_path, output_path, gain_db, timeout=300):
     _run_checked(cmd, timeout=timeout, step_name="Post-gain loudness correction")
 
 
+def _blend_voice_continuity(primary_voice_path, continuity_voice_path, output_path, timeout=300):
+    """Blend segmented voice with a low-level full-track continuity bed."""
+    filter_complex = (
+        "[0:a]volume=1.00[seg];"
+        "[1:a]highpass=f=85,lowpass=f=9500,"
+        "agate=threshold=0.0018:ratio=1.20:attack=8:release=420:range=0.72,"
+        "acompressor=threshold=0.11:ratio=1.55:attack=10:release=180:makeup=2.2,"
+        "volume=0.40[cont];"
+        "[seg][cont]amix=inputs=2:duration=shortest:dropout_transition=0,"
+        "alimiter=limit=0.97"
+    )
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(primary_voice_path),
+        "-i", str(continuity_voice_path),
+        "-filter_complex", filter_complex,
+        str(output_path)
+    ]
+    _run_checked(cmd, timeout=timeout, step_name="Voice continuity blend")
+
+
+def _measure_rms_dbfs(audio_path):
+    """Return RMS level in dBFS for a media/audio file."""
+    tmp_dir = Path(tempfile.gettempdir()) / "voice_rms_eval"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    wav_path = tmp_dir / "rms_probe.wav"
+    sr, y = _extract_mono_wav_for_analysis(audio_path, wav_path, sr=32000)
+    del sr
+    rms = float(np.sqrt(np.mean(y ** 2) + 1e-12))
+    return 20 * np.log10(rms)
+
+
 def detect_song_start(audio_path, window_size=5.0, energy_threshold=1.5):
     """Detect where the actual song starts by finding energy increase.
 
@@ -1309,7 +1665,8 @@ def detect_song_start(audio_path, window_size=5.0, energy_threshold=1.5):
 
 
 def separate_and_remix(video_audio_path, new_music_path, output_path,
-                       vocals_volume=1.0, music_volume=0.7):
+                       vocals_volume=1.0, music_volume=0.7,
+                       transcript_hint_text=None):
     """Full pipeline: replace background music while preserving voiceover.
 
     Creates a clean mix with:
@@ -1323,6 +1680,7 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         output_path: Path for final mixed audio
         vocals_volume: Volume for preserved voiceover
         music_volume: Base volume for new music (auto-ducks when voice detected)
+        transcript_hint_text: Optional timestamped transcript to force speech windows
 
     Returns:
         Path to final mixed audio
@@ -1344,7 +1702,7 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
     # Speech-focused cleanup to suppress residual music bleed from separation.
     preprocess_filter = (
         "highpass=f=95,"
-        "lowpass=f=6500,"
+        "lowpass=f=9000,"
         "afftdn=nf=-26:nt=w"
     )
 
@@ -1361,7 +1719,7 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         print(f"Warning: Advanced vocal cleanup failed ({e}), retrying with compatibility filter")
         compatibility_filter = (
             "highpass=f=95,"
-            "lowpass=f=6500"
+            "lowpass=f=9000"
         )
         fallback_cmd = [
             "ffmpeg", "-y",
@@ -1380,9 +1738,10 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
             cleaned_vocals_path,
             separated['music'],
             debleed_vocals_path,
-            suppression_strength=1.35,
-            residual_floor=0.05,
-            sr=32000
+            suppression_strength=1.12,
+            residual_floor=0.10,
+            sr=32000,
+            speech_high_cut_hz=8200
         )
         speech_source_path = debleed_vocals_path
     except Exception as e:
@@ -1404,10 +1763,29 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
 
     # Step 2: Detect ONLY voiceover segments (not singing)
     print("Step 2: Detecting voiceover segments...")
-    speech_segments = detect_speech_segments(speech_source_path, accompaniment_path=separated['music'])
+    using_transcript_segments = False
+    speech_segments = []
+    if transcript_hint_text:
+        parsed_segments = parse_transcript_speech_segments(
+            transcript_hint_text,
+            duration_seconds=duration_seconds
+        )
+        if parsed_segments:
+            speech_segments = parsed_segments
+            using_transcript_segments = True
+            print(f"Using transcript-guided speech segments: {len(speech_segments)}")
+        else:
+            print("Transcript hint provided but no timestamps were parsed; using ASR/VAD detection.")
+
+    if not speech_segments:
+        speech_segments = detect_speech_segments(
+            speech_source_path,
+            accompaniment_path=separated['music']
+        )
     force_full_track_gate = False
     total_detected_speech = sum((e - s) for s, e in speech_segments) if speech_segments else 0.0
-    min_expected_speech = max(2.0, duration_seconds * 0.06)
+    min_expected_speech = max(4.0, duration_seconds * 0.14)
+    print(f"Detected speech coverage: {total_detected_speech:.1f}s / {duration_seconds:.1f}s")
 
     if not speech_segments:
         print("No speech segments detected; using full-track speech-gate fallback.")
@@ -1418,9 +1796,8 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
             "using full-track speech-gate fallback to avoid dropping narration."
         )
         force_full_track_gate = True
-    elif DISABLE_FASTER_WHISPER:
-        print("ASR unavailable in this environment; using full-track continuity mode.")
-        force_full_track_gate = True
+    elif DISABLE_FASTER_WHISPER and not using_transcript_segments:
+        print("ASR unavailable in this environment; using acoustic-only speech windows.")
 
     # Step 3: Extract voiceover using detected segments
     print("Step 3: Extracting voiceover segments...")
@@ -1432,9 +1809,9 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
             "using aggressive full-track speech gate fallback."
         )
         fallback_filter = (
-            "highpass=f=95,lowpass=f=6500,"
-            "agate=threshold=0.004:ratio=1.7:attack=5:release=360:range=0.25,"
-            "acompressor=threshold=0.08:ratio=2.2:attack=6:release=130:makeup=2"
+            "highpass=f=95,lowpass=f=9000,"
+            "agate=threshold=0.0022:ratio=1.18:attack=7:release=450:range=0.72,"
+            "acompressor=threshold=0.11:ratio=1.7:attack=11:release=210:makeup=2.6"
         )
         cmd = [
             "ffmpeg", "-y",
@@ -1450,8 +1827,8 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         speech_mask_filter = (
             f"volume=enable='{enable_expr}':volume=1,"
             f"volume=enable='not({enable_expr})':volume=0,"
-            "highpass=f=95,lowpass=f=6500,"
-            "agate=threshold=0.008:ratio=2:attack=3:release=280:range=0.18"
+            "highpass=f=95,lowpass=f=9000,"
+            "agate=threshold=0.0024:ratio=1.22:attack=7:release=420:range=0.68"
         )
         cmd = [
             "ffmpeg", "-y",
@@ -1466,15 +1843,24 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
     final_voiceover_path = Path(tempfile.gettempdir()) / "final_voiceover.wav"
     mix_voice_source = clean_voiceover_path
     try:
+        pre_final_rms = _measure_rms_dbfs(clean_voiceover_path)
         suppress_music_bleed_with_reference(
             clean_voiceover_path,
             separated['music'],
             final_voiceover_path,
-            suppression_strength=1.50,
-            residual_floor=0.05,
-            sr=32000
+            suppression_strength=1.14,
+            residual_floor=0.10,
+            sr=32000,
+            speech_high_cut_hz=7600
         )
-        mix_voice_source = final_voiceover_path
+        post_final_rms = _measure_rms_dbfs(final_voiceover_path)
+        if post_final_rms < pre_final_rms - 2.4:
+            print(
+                f"Final de-bleed reduced voice too much ({pre_final_rms:.2f} -> {post_final_rms:.2f} dBFS); "
+                "keeping pre-final voiceover."
+            )
+        else:
+            mix_voice_source = final_voiceover_path
     except Exception as e:
         print(f"Warning: Final de-bleed pass failed ({e}); trying ffmpeg fallback.")
         try:
@@ -1491,6 +1877,53 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
                 f"Warning: Final ffmpeg de-bleed fallback failed ({fallback_error}); "
                 "using pre-final voiceover track."
             )
+
+    # ASR-unavailable continuity blend: keep missed narration from disappearing.
+    if DISABLE_FASTER_WHISPER and not using_transcript_segments:
+        try:
+            continuity_path = Path(tempfile.gettempdir()) / "continuity_voice.wav"
+            _run_checked(
+                [
+                    "ffmpeg", "-y",
+                    "-i", str(speech_source_path),
+                    "-af",
+                    "highpass=f=85,lowpass=f=9500,"
+                    "agate=threshold=0.0018:ratio=1.20:attack=8:release=420:range=0.72,"
+                    "acompressor=threshold=0.11:ratio=1.55:attack=10:release=180:makeup=2.2",
+                    str(continuity_path)
+                ],
+                timeout=max(180, ffmpeg_timeout),
+                step_name="Continuity voice preparation"
+            )
+            blended_voice_path = Path(tempfile.gettempdir()) / "blended_voiceover.wav"
+            _blend_voice_continuity(
+                mix_voice_source,
+                continuity_path,
+                blended_voice_path,
+                timeout=max(240, ffmpeg_timeout)
+            )
+            mix_voice_source = blended_voice_path
+            print("Applied voice continuity blend for ASR-unavailable mode.")
+        except Exception as e:
+            print(f"Warning: Continuity blend failed ({e}); using primary voice track.")
+
+    # If extracted narration is too quiet, boost before mixing.
+    try:
+        voice_rms_db = _measure_rms_dbfs(mix_voice_source)
+        print(f"Voiceover RMS before mix: {voice_rms_db:.2f} dBFS")
+        if voice_rms_db < -31.0:
+            gain_db = min(14.0, -24.0 - voice_rms_db)
+            boosted_voice_path = Path(tempfile.gettempdir()) / "boosted_voiceover.wav"
+            _apply_post_gain_limiter(
+                mix_voice_source,
+                boosted_voice_path,
+                gain_db=gain_db,
+                timeout=max(180, ffmpeg_timeout)
+            )
+            mix_voice_source = boosted_voice_path
+            print(f"Boosted quiet voiceover by +{gain_db:.1f} dB before mixing.")
+    except Exception as e:
+        print(f"Warning: Voiceover RMS check failed ({e}); continuing without pre-mix gain boost.")
 
     # Step 3.5: Detect and skip long instrumental intros (e.g., Pink Floyd)
     intro_skip = detect_song_start(new_music_path)
@@ -1546,7 +1979,7 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         retry_vocals_volume = min(1.45, vocals_volume * 1.15)
         retry_music_volume = max(0.42, music_volume * 0.82)
         retry_gate_threshold = 0.0032
-        retry_voice_lowpass = 8200
+        retry_voice_lowpass = 10200
         retry_sidechain_threshold = 0.010
         retry_sidechain_ratio = 9.0
         retry_output_makeup = 1.45
@@ -1559,6 +1992,16 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
             retry_gate_threshold = 0.0028
             retry_sidechain_ratio = 6.0
             retry_sidechain_threshold = 0.014
+            retry_voice_lowpass = max(retry_voice_lowpass, 10800)
+
+        if "output_too_muffled" in qa["issues"]:
+            retry_voice_lowpass = max(retry_voice_lowpass, 11800)
+            retry_gate_threshold = min(retry_gate_threshold, 0.0024)
+            retry_output_makeup = max(retry_output_makeup, 1.55)
+
+        if "mix_too_quiet" in qa["issues"]:
+            retry_vocals_volume = min(1.60, retry_vocals_volume * 1.15)
+            retry_music_volume = max(0.35, retry_music_volume * 0.85)
 
         mix_vocals_with_music_ducking(
             mix_voice_source,

@@ -60,6 +60,8 @@ if 'selected_song' not in st.session_state:
     st.session_state.selected_song = None
 if 'preserve_voice' not in st.session_state:
     st.session_state.preserve_voice = False
+if 'voiceover_transcript_hint' not in st.session_state:
+    st.session_state.voiceover_transcript_hint = ""
 if 'recently_used_songs' not in st.session_state:
     st.session_state.recently_used_songs = load_recently_used_songs()  # Load from cache
 
@@ -220,6 +222,24 @@ elif st.session_state.step == 3:
 
     if preserve_voice:
         st.info("Voice will be extracted and mixed with the new music track")
+        with st.expander("Advanced (optional): transcript hint", expanded=False):
+            transcript_hint = st.text_area(
+                "Timestamped transcript (optional)",
+                value=st.session_state.voiceover_transcript_hint,
+                height=140,
+                help=(
+                    "Leave blank for fully automatic mode. "
+                    "If provided, timestamps (e.g. `0:05`) can further reduce lyric bleed."
+                ),
+                placeholder=(
+                    "Everything about the game has changed.\n"
+                    "0:05\n"
+                    "Except for the most important thing.\n"
+                    "0:08\n"
+                    "..."
+                )
+            )
+            st.session_state.voiceover_transcript_hint = transcript_hint
 
     col1, col2 = st.columns([1, 1])
     with col1:
@@ -394,7 +414,8 @@ elif st.session_state.step == 4:
                                 a_path,
                                 mixed_audio,
                                 vocals_volume=1.0,
-                                music_volume=0.7
+                                music_volume=0.7,
+                                transcript_hint_text=(st.session_state.voiceover_transcript_hint or "").strip() or None
                             )
                             a_path = mixed_audio
                         except Exception as e:
@@ -546,7 +567,8 @@ elif st.session_state.step == 4:
                                     a_path,
                                     mixed_audio,
                                     vocals_volume=1.0,
-                                    music_volume=0.7
+                                    music_volume=0.7,
+                                    transcript_hint_text=(st.session_state.voiceover_transcript_hint or "").strip() or None
                                 )
                                 a_path = mixed_audio
                             except Exception as e:
