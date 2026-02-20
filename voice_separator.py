@@ -11,7 +11,7 @@ import numpy as np
 import torch
 import librosa
 from scipy.io import wavfile
-from scipy.signal import butter, sosfiltfilt
+from scipy.signal import butter, sosfiltfilt, correlate
 
 os.environ.setdefault("NUMBA_CACHE_DIR", str(Path(tempfile.gettempdir()) / "numba_cache"))
 os.environ.setdefault("NUMBA_NUM_THREADS", "1")
@@ -1056,7 +1056,11 @@ def extract_speech_only(vocals_path, output_path):
 
 def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
                                    vocals_volume=1.0, music_volume=0.8,
-                                   gate_threshold=0.006, process_timeout=600):
+                                   gate_threshold=0.004, process_timeout=600,
+                                   voice_lowpass_hz=7600,
+                                   sidechain_threshold=0.012,
+                                   sidechain_ratio=7.0,
+                                   output_makeup=1.2):
     """Mix vocals with new music using sidechain ducking and noise gate.
 
     The music volume automatically ducks (lowers) when voice is detected,
@@ -1071,7 +1075,11 @@ def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
         output_path: Path for output mixed audio
         vocals_volume: Volume multiplier for vocals (1.0 = original)
         music_volume: Base volume for music when no voice (0.8 default)
-        gate_threshold: Threshold for noise gate (0.05 = suppress quiet sounds)
+        gate_threshold: Threshold for noise gate
+        voice_lowpass_hz: Voice low-pass cutoff (higher keeps brightness)
+        sidechain_threshold: Sidechain trigger level
+        sidechain_ratio: Sidechain compression ratio
+        output_makeup: Final gain before limiter
 
     Returns:
         Path to mixed audio file
@@ -1079,23 +1087,24 @@ def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
     output_path = Path(output_path)
 
     filter_complex = (
-        # Preserve full narration while suppressing low-level residual bleed.
-        f"[0:a]highpass=f=100,lowpass=f=5600,"
-        f"agate=threshold={gate_threshold}:ratio=2:attack=4:release=320:range=0.18,"
-        f"acompressor=threshold=0.075:ratio=2.5:attack=5:release=120:makeup=2,"
+        # Voice path: preserve speech continuity, reduce bleed, avoid muffling.
+        f"[0:a]highpass=f=90,lowpass=f={voice_lowpass_hz},"
+        f"agate=threshold={gate_threshold}:ratio=1.6:attack=5:release=360:range=0.30,"
+        f"acompressor=threshold=0.090:ratio=2.0:attack=8:release=160:makeup=2.4,"
         f"volume={vocals_volume}[voice];"
         f"[1:a]volume={music_volume}[music_raw];"
-        # Strong sidechain so new music stays clearly under voiceover.
+        # Sidechain keeps replacement music under narration while avoiding pumping.
         f"[music_raw][voice]sidechaincompress="
-        f"threshold=0.010:"
-        f"ratio=9:"
-        f"attack=12:"
-        f"release=420:"
+        f"threshold={sidechain_threshold}:"
+        f"ratio={sidechain_ratio}:"
+        f"attack=18:"
+        f"release=460:"
         f"makeup=1"
         f"[music_ducked];"
-        # Mix and limit final peaks.
+        # Final leveling so output is not too quiet.
         f"[voice][music_ducked]amix=inputs=2:duration=shortest:dropout_transition=0,"
-        f"alimiter=limit=0.95"
+        f"acompressor=threshold=0.18:ratio=2.0:attack=20:release=220:makeup={output_makeup},"
+        f"alimiter=limit=0.96"
     )
 
     cmd = [
@@ -1112,6 +1121,146 @@ def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
 
     print(f"Mixed audio with ducking saved to: {output_path}")
     return output_path
+
+
+def _extract_mono_wav_for_analysis(source_path, output_path, sr=32000):
+    """Convert any audio source to analysis-friendly mono PCM WAV."""
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(source_path),
+        "-vn",
+        "-acodec", "pcm_s16le",
+        "-ar", str(sr),
+        "-ac", "1",
+        str(output_path)
+    ]
+    _run_checked(cmd, timeout=180, step_name="Audio analysis extraction")
+    sr_loaded, y = wavfile.read(str(output_path))
+    if y.ndim > 1:
+        y = y.mean(axis=1)
+    y = y.astype(np.float32) / 32768.0
+    return sr_loaded, y
+
+
+def _max_corr_with_lag_limit(x, y, sr, max_lag_seconds=0.75):
+    """Compute max normalized cross-correlation with limited lag."""
+    n = min(len(x), len(y))
+    if n < 4096:
+        return 0.0
+
+    # Keep memory bounded: center crop + cheap decimation.
+    x = x[:n]
+    y = y[:n]
+    target_len = min(n, int(24 * sr))
+    start = max(0, (n - target_len) // 2)
+    x = x[start:start + target_len]
+    y = y[start:start + target_len]
+
+    decim = 4
+    x = x[::decim]
+    y = y[::decim]
+    sr_d = max(1, sr // decim)
+
+    x = x - np.mean(x)
+    y = y - np.mean(y)
+    denom = float(np.sqrt(np.sum(x ** 2) * np.sum(y ** 2)) + 1e-12)
+    if denom <= 1e-10:
+        return 0.0
+
+    max_lag = int(max_lag_seconds * sr_d)
+    corr = correlate(x, y, mode="full", method="fft")
+    mid = len(corr) // 2
+    corr = corr[mid - max_lag:mid + max_lag + 1]
+    return float(np.max(np.abs(corr)) / denom)
+
+
+def evaluate_mix_quality(mixed_audio_path, original_music_path):
+    """Estimate whether a swap quality is acceptable and suggest adjustments."""
+    mixed_audio_path = Path(mixed_audio_path)
+    original_music_path = Path(original_music_path)
+
+    tmp_dir = Path(tempfile.gettempdir()) / "mix_quality_eval"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    mixed_wav = tmp_dir / "mixed_eval.wav"
+    music_wav = tmp_dir / "orig_music_eval.wav"
+
+    report = {
+        "rms_dbfs": None,
+        "peak_dbfs": None,
+        "jumps_gt12db": None,
+        "hf_ratio_ge6k": None,
+        "music_leak_corr": None,
+        "issues": [],
+        "retry_recommended": False
+    }
+
+    try:
+        sr_m, y_m = _extract_mono_wav_for_analysis(mixed_audio_path, mixed_wav, sr=32000)
+        sr_o, y_o = _extract_mono_wav_for_analysis(original_music_path, music_wav, sr=32000)
+
+        n = min(len(y_m), len(y_o))
+        y_m = y_m[:n]
+        y_o = y_o[:n]
+        duration_seconds = n / sr_m if sr_m else 0.0
+
+        rms = float(np.sqrt(np.mean(y_m ** 2) + 1e-12))
+        peak = float(np.max(np.abs(y_m)) + 1e-12)
+        report["rms_dbfs"] = 20 * np.log10(rms)
+        report["peak_dbfs"] = 20 * np.log10(peak)
+
+        frame = int(0.02 * sr_m)
+        if frame > 0 and len(y_m) > frame * 2:
+            levels = []
+            for i in range(0, len(y_m) - frame, frame):
+                seg = y_m[i:i + frame]
+                levels.append(20 * np.log10(np.sqrt(np.mean(seg ** 2) + 1e-12)))
+            levels = np.array(levels, dtype=np.float32)
+            jumps = np.abs(np.diff(levels))
+            report["jumps_gt12db"] = int(np.sum(jumps > 12.0))
+        else:
+            report["jumps_gt12db"] = 0
+
+        yf = np.fft.rfft(y_m)
+        ff = np.fft.rfftfreq(len(y_m), d=1 / sr_m)
+        power = np.abs(yf) ** 2 + 1e-18
+        report["hf_ratio_ge6k"] = float(power[ff >= 6000].sum() / power.sum())
+
+        # Leakage proxy: only reliable on clips with enough duration.
+        if duration_seconds >= 15.0:
+            sos = butter(6, [120 / (sr_m * 0.5), 5000 / (sr_m * 0.5)], btype="bandpass", output="sos")
+            y_m_band = sosfiltfilt(sos, y_m)
+            y_o_band = sosfiltfilt(sos, y_o)
+            report["music_leak_corr"] = _max_corr_with_lag_limit(y_m_band, y_o_band, sr_m)
+        else:
+            report["music_leak_corr"] = 0.0
+
+        if report["rms_dbfs"] < -19.0:
+            report["issues"].append("mix_too_quiet")
+        if report["jumps_gt12db"] > 20:
+            report["issues"].append("voice_choppy_or_pumping")
+        if report["hf_ratio_ge6k"] < 0.010:
+            report["issues"].append("output_too_muffled")
+        if report["music_leak_corr"] > 0.075:
+            report["issues"].append("possible_original_music_bleed")
+
+        report["retry_recommended"] = len(report["issues"]) > 0
+    except Exception as e:
+        # Do not block output on QA failures.
+        report["issues"].append(f"quality_eval_failed:{e}")
+        report["retry_recommended"] = False
+
+    return report
+
+
+def _apply_post_gain_limiter(input_path, output_path, gain_db, timeout=300):
+    """Apply a fixed gain then limiter to lift quiet outputs safely."""
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(input_path),
+        "-af", f"volume={gain_db:.2f}dB,alimiter=limit=0.97",
+        str(output_path)
+    ]
+    _run_checked(cmd, timeout=timeout, step_name="Post-gain loudness correction")
 
 
 def detect_song_start(audio_path, window_size=5.0, energy_threshold=1.5):
@@ -1376,6 +1525,110 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         music_volume=music_volume,
         process_timeout=max(600, ffmpeg_timeout)
     )
+
+    # Step 4.5: Evaluate quality and auto-correct once when quality is poor.
+    print("Step 4.5: Evaluating swap quality...")
+    qa = evaluate_mix_quality(mixed_path, separated['music'])
+    selected_qa = qa
+    print(
+        "Mix QA:"
+        f" rms={qa.get('rms_dbfs')},"
+        f" jumps12={qa.get('jumps_gt12db')},"
+        f" hf6k={qa.get('hf_ratio_ge6k')},"
+        f" leak={qa.get('music_leak_corr')},"
+        f" issues={qa.get('issues')}"
+    )
+
+    if qa.get("retry_recommended"):
+        print("Quality issues detected, remixing once with adjusted settings...")
+        retry_output = output_path.with_name(f"{output_path.stem}_retry{output_path.suffix}")
+
+        retry_vocals_volume = min(1.45, vocals_volume * 1.15)
+        retry_music_volume = max(0.42, music_volume * 0.82)
+        retry_gate_threshold = 0.0032
+        retry_voice_lowpass = 8200
+        retry_sidechain_threshold = 0.010
+        retry_sidechain_ratio = 9.0
+        retry_output_makeup = 1.45
+
+        if "possible_original_music_bleed" in qa["issues"]:
+            retry_music_volume = max(0.35, retry_music_volume * 0.90)
+            retry_sidechain_ratio = max(retry_sidechain_ratio, 10.0)
+
+        if "voice_choppy_or_pumping" in qa["issues"]:
+            retry_gate_threshold = 0.0028
+            retry_sidechain_ratio = 6.0
+            retry_sidechain_threshold = 0.014
+
+        mix_vocals_with_music_ducking(
+            mix_voice_source,
+            music_to_use,
+            retry_output,
+            vocals_volume=retry_vocals_volume,
+            music_volume=retry_music_volume,
+            gate_threshold=retry_gate_threshold,
+            process_timeout=max(600, ffmpeg_timeout),
+            voice_lowpass_hz=retry_voice_lowpass,
+            sidechain_threshold=retry_sidechain_threshold,
+            sidechain_ratio=retry_sidechain_ratio,
+            output_makeup=retry_output_makeup
+        )
+
+        retry_qa = evaluate_mix_quality(retry_output, separated['music'])
+        print(
+            "Retry Mix QA:"
+            f" rms={retry_qa.get('rms_dbfs')},"
+            f" jumps12={retry_qa.get('jumps_gt12db')},"
+            f" hf6k={retry_qa.get('hf_ratio_ge6k')},"
+            f" leak={retry_qa.get('music_leak_corr')},"
+            f" issues={retry_qa.get('issues')}"
+        )
+
+        # Prefer retry if it has fewer issues or less severe loudness/choppiness.
+        prefer_retry = len(retry_qa.get("issues", [])) < len(qa.get("issues", []))
+        if not prefer_retry:
+            base_rms = qa.get("rms_dbfs") if qa.get("rms_dbfs") is not None else -99
+            retry_rms = retry_qa.get("rms_dbfs") if retry_qa.get("rms_dbfs") is not None else -99
+            base_jumps = qa.get("jumps_gt12db") if qa.get("jumps_gt12db") is not None else 999
+            retry_jumps = retry_qa.get("jumps_gt12db") if retry_qa.get("jumps_gt12db") is not None else 999
+            prefer_retry = retry_rms > base_rms + 1.0 or retry_jumps + 6 < base_jumps
+
+        if prefer_retry:
+            try:
+                shutil.move(str(retry_output), str(output_path))
+                print("Using remixed output after QA adaptation.")
+                selected_qa = retry_qa
+            except Exception:
+                print("Warning: Could not promote retry output; keeping original mix.")
+        else:
+            print("Keeping original mix after QA comparison.")
+
+    # Step 4.6: If still too quiet, apply a conservative loudness lift.
+    if selected_qa.get("rms_dbfs") is not None and selected_qa["rms_dbfs"] < -19.0:
+        target_rms_dbfs = -16.0
+        gain_db = min(9.0, target_rms_dbfs - selected_qa["rms_dbfs"])
+        if gain_db > 0.4:
+            print(f"Step 4.6: Applying post-gain loudness correction (+{gain_db:.1f} dB)...")
+            loud_tmp = output_path.with_name(f"{output_path.stem}_loud{output_path.suffix}")
+            try:
+                _apply_post_gain_limiter(
+                    output_path,
+                    loud_tmp,
+                    gain_db=gain_db,
+                    timeout=max(300, ffmpeg_timeout)
+                )
+                shutil.move(str(loud_tmp), str(output_path))
+                final_qa = evaluate_mix_quality(output_path, separated['music'])
+                print(
+                    "Post-gain Mix QA:"
+                    f" rms={final_qa.get('rms_dbfs')},"
+                    f" jumps12={final_qa.get('jumps_gt12db')},"
+                    f" hf6k={final_qa.get('hf_ratio_ge6k')},"
+                    f" leak={final_qa.get('music_leak_corr')},"
+                    f" issues={final_qa.get('issues')}"
+                )
+            except Exception as e:
+                print(f"Warning: Post-gain loudness correction failed ({e}).")
 
     return mixed_path
 
