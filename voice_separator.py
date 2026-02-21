@@ -1587,14 +1587,15 @@ def _apply_post_gain_limiter(input_path, output_path, gain_db, timeout=300):
     _run_checked(cmd, timeout=timeout, step_name="Post-gain loudness correction")
 
 
-def _blend_voice_continuity(primary_voice_path, continuity_voice_path, output_path, timeout=300):
+def _blend_voice_continuity(primary_voice_path, continuity_voice_path, output_path, timeout=300, continuity_gain=0.40):
     """Blend segmented voice with a low-level full-track continuity bed."""
+    continuity_gain = float(np.clip(continuity_gain, 0.20, 0.65))
     filter_complex = (
         "[0:a]volume=1.00[seg];"
         "[1:a]highpass=f=85,lowpass=f=9500,"
         "agate=threshold=0.0018:ratio=1.20:attack=8:release=420:range=0.72,"
         "acompressor=threshold=0.11:ratio=1.55:attack=10:release=180:makeup=2.2,"
-        "volume=0.40[cont];"
+        f"volume={continuity_gain:.3f}[cont];"
         "[seg][cont]amix=inputs=2:duration=shortest:dropout_transition=0,"
         "alimiter=limit=0.97"
     )
@@ -1881,6 +1882,16 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
     # ASR-unavailable continuity blend: keep missed narration from disappearing.
     if DISABLE_FASTER_WHISPER and not using_transcript_segments:
         try:
+            speech_ratio = 0.0
+            if duration_seconds > 0:
+                speech_ratio = total_detected_speech / duration_seconds
+            if speech_ratio < 0.18:
+                continuity_gain = 0.52
+            elif speech_ratio < 0.30:
+                continuity_gain = 0.38
+            else:
+                continuity_gain = 0.28
+
             continuity_path = Path(tempfile.gettempdir()) / "continuity_voice.wav"
             _run_checked(
                 [
@@ -1900,10 +1911,14 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
                 mix_voice_source,
                 continuity_path,
                 blended_voice_path,
-                timeout=max(240, ffmpeg_timeout)
+                timeout=max(240, ffmpeg_timeout),
+                continuity_gain=continuity_gain
             )
             mix_voice_source = blended_voice_path
-            print("Applied voice continuity blend for ASR-unavailable mode.")
+            print(
+                "Applied voice continuity blend for ASR-unavailable mode "
+                f"(speech_ratio={speech_ratio:.2f}, gain={continuity_gain:.2f})."
+            )
         except Exception as e:
             print(f"Warning: Continuity blend failed ({e}); using primary voice track.")
 
@@ -1911,8 +1926,8 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
     try:
         voice_rms_db = _measure_rms_dbfs(mix_voice_source)
         print(f"Voiceover RMS before mix: {voice_rms_db:.2f} dBFS")
-        if voice_rms_db < -31.0:
-            gain_db = min(14.0, -24.0 - voice_rms_db)
+        if voice_rms_db < -26.5:
+            gain_db = min(9.0, -23.5 - voice_rms_db)
             boosted_voice_path = Path(tempfile.gettempdir()) / "boosted_voiceover.wav"
             _apply_post_gain_limiter(
                 mix_voice_source,
@@ -2048,8 +2063,8 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
 
     # Step 4.6: If still too quiet, apply a conservative loudness lift.
     if selected_qa.get("rms_dbfs") is not None and selected_qa["rms_dbfs"] < -19.0:
-        target_rms_dbfs = -16.0
-        gain_db = min(9.0, target_rms_dbfs - selected_qa["rms_dbfs"])
+        target_rms_dbfs = -15.5
+        gain_db = min(12.0, target_rms_dbfs - selected_qa["rms_dbfs"])
         if gain_db > 0.4:
             print(f"Step 4.6: Applying post-gain loudness correction (+{gain_db:.1f} dB)...")
             loud_tmp = output_path.with_name(f"{output_path.stem}_loud{output_path.suffix}")
