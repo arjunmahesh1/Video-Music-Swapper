@@ -11,7 +11,12 @@ from audio_analyzer import (
     infer_video_genres,
     select_song_probabilistic
 )
-from voice_separator import separate_and_remix, cleanup_demucs_output
+from voiceover_backend import (
+    cleanup_voice_backend_outputs,
+    get_default_voice_backend_id,
+    get_voice_backend_options,
+    separate_and_remix_with_backend,
+)
 from cache_manager import (
     load_recently_used_songs,
     save_recently_used_songs
@@ -60,6 +65,8 @@ if 'selected_song' not in st.session_state:
     st.session_state.selected_song = None
 if 'preserve_voice' not in st.session_state:
     st.session_state.preserve_voice = False
+if 'voice_backend' not in st.session_state:
+    st.session_state.voice_backend = get_default_voice_backend_id()
 if 'voiceover_transcript_hint' not in st.session_state:
     st.session_state.voiceover_transcript_hint = ""
 if 'recently_used_songs' not in st.session_state:
@@ -222,6 +229,30 @@ elif st.session_state.step == 3:
 
     if preserve_voice:
         st.info("Voice will be extracted and mixed with the new music track")
+        backend_options = get_voice_backend_options()
+        available_backend_ids = [option.backend_id for option in backend_options if option.available]
+        if st.session_state.voice_backend not in available_backend_ids:
+            st.session_state.voice_backend = available_backend_ids[0]
+
+        selected_backend = st.selectbox(
+            "Voiceover backend",
+            options=available_backend_ids,
+            index=available_backend_ids.index(st.session_state.voice_backend),
+            format_func=lambda backend_id: next(
+                option.label for option in backend_options if option.backend_id == backend_id
+            ),
+            help="Use the current heuristic backend or a trained Stage 1 dialogue checkpoint.",
+        )
+        st.session_state.voice_backend = selected_backend
+        selected_option = next(
+            option for option in backend_options if option.backend_id == selected_backend
+        )
+        st.caption(selected_option.description)
+
+        for option in backend_options:
+            if not option.available and option.availability_reason:
+                st.caption(f"{option.label}: {option.availability_reason}")
+
         with st.expander("Advanced (optional): transcript hint", expanded=False):
             transcript_hint = st.text_area(
                 "Timestamped transcript (optional)",
@@ -409,10 +440,11 @@ elif st.session_state.step == 4:
 
                             # Separate and mix
                             mixed_audio = tmp_path / "mixed_audio.wav"
-                            separate_and_remix(
-                                original_audio,
-                                a_path,
-                                mixed_audio,
+                            separate_and_remix_with_backend(
+                                video_audio_path=original_audio,
+                                new_music_path=a_path,
+                                output_path=mixed_audio,
+                                backend_id=st.session_state.voice_backend,
                                 vocals_volume=1.0,
                                 music_volume=0.7,
                                 transcript_hint_text=(st.session_state.voiceover_transcript_hint or "").strip() or None
@@ -444,7 +476,7 @@ elif st.session_state.step == 4:
                     # Cleanup
                     if st.session_state.preserve_voice:
                         try:
-                            cleanup_demucs_output()
+                            cleanup_voice_backend_outputs()
                         except:
                             pass
 
@@ -562,10 +594,11 @@ elif st.session_state.step == 4:
                                 )
 
                                 mixed_audio = tmp_path / "mixed_audio.wav"
-                                separate_and_remix(
-                                    original_audio,
-                                    a_path,
-                                    mixed_audio,
+                                separate_and_remix_with_backend(
+                                    video_audio_path=original_audio,
+                                    new_music_path=a_path,
+                                    output_path=mixed_audio,
+                                    backend_id=st.session_state.voice_backend,
                                     vocals_volume=1.0,
                                     music_volume=0.7,
                                     transcript_hint_text=(st.session_state.voiceover_transcript_hint or "").strip() or None
@@ -596,7 +629,7 @@ elif st.session_state.step == 4:
 
                         if st.session_state.preserve_voice:
                             try:
-                                cleanup_demucs_output()
+                                cleanup_voice_backend_outputs()
                             except:
                                 pass
 
