@@ -57,8 +57,18 @@ with an instant A/B audio flip.
 ### Benchmarks
 
 `python -m eval.mood_benchmark` scores mood detection against 13 hand-labeled
-sample ads; `--stem` runs the production path (Demucs music stem). Current
-full-mix numbers: 54% top-1, 92% top-3 (CLAP+DSP) vs 23%/85% DSP-only.
+sample ads (`--stem` for the Demucs music-stem variant).
+
+| input              | model     | top-1 | top-3 |
+|--------------------|-----------|-------|-------|
+| full mix           | DSP only  | 23%   | 85%   |
+| full mix           | CLAP+DSP  | 54%   | 92%   |
+| Demucs music stem  | CLAP+DSP  | 38%   | 85%   |
+
+Empirical finding: separation hurts mood detection (stems drop sung vocals and
+add artifacts; the `music_and_speech` CLAP handles voiceover fine), so the
+production pipeline profiles the full mix and uses stems only for narration
+coverage and rendering.
 
 ---
 

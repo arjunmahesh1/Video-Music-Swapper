@@ -58,7 +58,7 @@ def score_track(
         "track_mood": mood_profile.primary,
         "track_tempo": round(mood_profile.tempo, 1),
         "track_energy": round(mood_profile.energy, 3),
-        "explanation": _explain(direction, mood_profile, total),
+        "explanation": _explain(direction, mood_profile, total, style_fit, mood_fit),
     }
 
 
@@ -94,10 +94,19 @@ def _range_fit(value: float, rng: tuple[float, float], sigma: float, octave_tole
     return best
 
 
-def _explain(direction: MusicDirection, profile: MoodProfile, total: float) -> str:
+def _explain(
+    direction: MusicDirection,
+    profile: MoodProfile,
+    total: float,
+    style_fit: float | None,
+    mood_fit: float,
+) -> str:
     mood_label = MOODS[profile.primary]["label"]
     verdict = "strong" if total >= 0.65 else "decent" if total >= 0.45 else "weak"
-    return (
+    text = (
         f"Reads as {mood_label.lower()} at {profile.tempo:.0f} BPM, energy {profile.energy:.2f} — "
         f"a {verdict} fit for {direction.mood_label.lower()} aimed at {direction.segment_label}."
     )
+    if profile.primary != direction.mood and style_fit is not None and style_fit > mood_fit:
+        text += " Its sound palette matches the brief even though its dominant mood differs."
+    return text
