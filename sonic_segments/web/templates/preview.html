@@ -88,14 +88,17 @@ const player = document.getElementById("player");
 const pills = [...document.querySelectorAll(".pill[data-src]")];
 let lastVariant = pills[1] || pills[0];
 
+let pendingSeek = null;
+
 function swapTo(pill) {
-  if (!pill || pill.dataset.src === player.currentSrc) return;
+  if (!pill || pill.classList.contains("active")) return;
   const t = player.currentTime, playing = !player.paused;
   pills.forEach(p => p.classList.toggle("active", p === pill));
   if (!pill.classList.contains("original")) lastVariant = pill;
+  pendingSeek = t;
   player.src = pill.dataset.src;
-  player.currentTime = t;
-  if (playing) player.play();
+  player.load();
+  if (playing) player.play().catch(() => {});
 }
 
 pills.forEach(p => p.onclick = () => swapTo(p));
@@ -105,8 +108,7 @@ document.getElementById("flipBtn").onclick = () => {
   swapTo(onOriginal ? lastVariant : pills[0]);
 };
 
-// seek restore on metadata (some browsers reset currentTime on src change)
-let pendingSeek = null;
+// restore playhead once the new source's metadata is ready
 player.addEventListener("loadedmetadata", () => {
   if (pendingSeek != null) { player.currentTime = pendingSeek; pendingSeek = null; }
 });

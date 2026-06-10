@@ -1,5 +1,13 @@
-# Video-Music-Swapper
+# Video-Music-Swapper / Sonic Segments
 Swap any video's soundtrack with a new audio track - upload a file, or pick from your Spotify liked songs!
+
+> **Sonic Segments product site** (re-score ads per audience, A/B preview):
+>
+> ```bash
+> python -m uvicorn sonic_segments.web.main:app --port 8000
+> ```
+>
+> Architecture, flows, and benchmarks: see [SONIC_SEGMENTS_MVP.md](SONIC_SEGMENTS_MVP.md).
 
 # Setup
 
