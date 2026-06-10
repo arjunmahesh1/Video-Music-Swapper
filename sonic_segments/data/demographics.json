@@ -1,0 +1,297 @@
+{
+  "_meta": {
+    "version": "2026-06-09",
+    "research_notes": [
+      "Hip-Hop/R&B is the most-streamed core genre in the US (~30.7% of streams); 44% of 18-25s name hip-hop their favorite genre (BPI Seeking Community 2025).",
+      "12-34s stream more Hip-Hop/R&B than Country; 35-54s invert that (Coleman Insights). Electronica/Dance peaks at 25-39 and is weakest 60+.",
+      "Boomers index on nostalgia and long-standing favorites over discovery (NuVoodoo 2025); melody and clarity beat bass-heavy production.",
+      "Regional strongholds: K-pop ~half of South Korean streams; Latin is 8.2% of global streams and dominant in LATAM; Nigeria is 62.2% local repertoire (Afrobeats); India is the largest ad-supported market with Bollywood/Punjabi pop leading (Luminate/IFPI 2025).",
+      "Ad-music research: musical campaigns are ~27% better on recall and business effects; music-message congruence is the dominant effectiveness factor; slower tempos suit luxury/finance/wellness, faster suit action/sports CTAs (Advids, UCPress Music Perception)."
+    ],
+    "sources": [
+      "https://www.bpi.co.uk/news-analysis/seeking-community-report-on-gen-z-music-insights",
+      "https://colemaninsights.com/coleman-insights-blog/how-demographics-impact-contemporary-music-tastes",
+      "https://nuvoodoo.com/2025/03/05/new-data-gen-zs-passion-for-discovering-new-music-is-a-big-meh/",
+      "https://www.musicbusinessworldwide.com/half-of-all-paid-music-streams-globally-derive-from-just-4-countries-and-other-highlights-from-luminates-latest-report/",
+      "https://www.ifpi.org/wp-content/uploads/2024/03/GMR2025_SOTI.pdf",
+      "https://hmc.chartmetric.com/chartmetric-2025-year-in-music-industry-report/",
+      "https://advids.co/insights/the-psychology-of-music-how-tempo-impacts-viewer-engagement-and-perception-of-your-brand",
+      "https://online.ucpress.edu/mp/article/41/1/59/197099/Attention-Required-for-Advertisement-Pitch-Tempo"
+    ]
+  },
+  "segments": [
+    {
+      "id": "gen_z",
+      "label": "Gen-Z (16-24)",
+      "region": "US / EU / Global urban",
+      "description": "TikTok-native; hip-hop is the #1 favorite genre (44%), but mood matters more than genre allegiance. High novelty tolerance, meme-adjacent sound works.",
+      "platforms": ["TikTok", "Instagram Reels", "YouTube Shorts"],
+      "core_genres": ["hip hop", "trap", "hyperpop", "pop rap", "bedroom pop", "phonk", "edm"],
+      "tempo_range": [100, 165],
+      "energy_range": [0.55, 0.95],
+      "style_keywords": ["punchy 808s", "glossy synths", "pitched vocal chops", "fast cuts"],
+      "example_artists": ["Travis Scott", "Charli XCX", "Ice Spice", "PinkPantheress", "Fred again.."],
+      "mood_overrides": {
+        "happy": {"genres": ["hyperpop", "dance pop", "pop rap"], "search_terms": ["upbeat hyperpop", "feel good dance pop energetic"], "prompt": "bright energetic hyperpop with glossy synths and a bouncy beat"},
+        "hype": {"genres": ["trap", "phonk", "edm"], "search_terms": ["hard trap beat", "aggressive phonk drift"], "prompt": "hard-hitting trap beat with heavy 808 bass and aggressive energy"},
+        "calm": {"genres": ["bedroom pop", "lo-fi"], "search_terms": ["bedroom pop chill", "lofi chill beats"], "prompt": "dreamy bedroom pop with soft guitars and lo-fi texture"},
+        "playful": {"genres": ["hyperpop", "indie pop"], "search_terms": ["quirky playful electronic pop"], "prompt": "quirky playful electronic pop with pitched vocal chops"}
+      }
+    },
+    {
+      "id": "young_millennials",
+      "label": "Young Millennials (25-34)",
+      "region": "US / EU",
+      "description": "Streaming-first; Electronica/Dance peaks in this 25-39 bracket. Nostalgia for 2010s indie and festival EDM; values authenticity over polish.",
+      "platforms": ["Instagram", "YouTube", "Spotify"],
+      "core_genres": ["indie pop", "alt pop", "house", "electro pop", "pop rock", "r&b"],
+      "tempo_range": [90, 130],
+      "energy_range": [0.45, 0.8],
+      "style_keywords": ["anthemic choruses", "warm analog synths", "indie vocals", "funky bass"],
+      "example_artists": ["Dua Lipa", "Glass Animals", "Doja Cat", "ODESZA", "Tame Impala"],
+      "mood_overrides": {
+        "happy": {"genres": ["indie pop", "nu-disco"], "search_terms": ["feel good indie pop", "nu disco funky upbeat"], "prompt": "feel-good indie pop with funky bass and warm analog synths"},
+        "hype": {"genres": ["house", "electro pop"], "search_terms": ["festival house anthem", "electro pop energetic"], "prompt": "festival house anthem with a euphoric drop"},
+        "emotional": {"genres": ["alt pop", "indie folk"], "search_terms": ["emotional indie ballad cinematic"], "prompt": "emotional alt-pop ballad with airy vocals and swelling pads"}
+      }
+    },
+    {
+      "id": "millennial_parents",
+      "label": "Millennial Parents (30-45)",
+      "region": "US / EU",
+      "description": "Family-first purchase decision makers; respond to warmth, trust, and gentle optimism. Acoustic textures and human imperfection signal sincerity.",
+      "platforms": ["Facebook", "Instagram", "YouTube"],
+      "core_genres": ["acoustic", "folk pop", "soft pop", "singer-songwriter"],
+      "tempo_range": [75, 115],
+      "energy_range": [0.25, 0.6],
+      "style_keywords": ["warm acoustic guitar", "hand claps", "whistling", "ukulele"],
+      "example_artists": ["Ed Sheeran", "Jack Johnson", "Ingrid Michaelson", "Vance Joy"],
+      "mood_overrides": {
+        "happy": {"genres": ["folk pop", "acoustic"], "search_terms": ["happy acoustic claps whistle", "uplifting folk pop family"], "prompt": "warm happy acoustic folk pop with hand claps and whistling"},
+        "calm": {"genres": ["acoustic", "ambient pop"], "search_terms": ["gentle acoustic calm warm"], "prompt": "gentle fingerpicked acoustic guitar, cozy and reassuring"},
+        "uplifting": {"genres": ["folk pop", "soft rock"], "search_terms": ["inspiring acoustic build uplifting"], "prompt": "uplifting acoustic pop that builds to a warm anthemic chorus"}
+      }
+    },
+    {
+      "id": "gen_x",
+      "label": "Gen-X (45-60)",
+      "region": "US / EU",
+      "description": "Country and rock over-index in the 35-54 bracket; brand-loyal, skeptical of overproduced trend audio. Real instruments signal credibility.",
+      "platforms": ["Facebook", "YouTube", "TV"],
+      "core_genres": ["classic rock", "blues rock", "pop rock", "country rock", "soul"],
+      "tempo_range": [80, 130],
+      "energy_range": [0.4, 0.8],
+      "style_keywords": ["electric guitar", "live drums", "hammond organ", "real instruments"],
+      "example_artists": ["Foo Fighters", "Lenny Kravitz", "The Black Keys", "Sheryl Crow"],
+      "mood_overrides": {
+        "hype": {"genres": ["blues rock", "stadium rock"], "search_terms": ["driving blues rock riff", "stadium rock energetic"], "prompt": "driving blues rock with a gritty guitar riff and live drums"},
+        "happy": {"genres": ["pop rock", "soul"], "search_terms": ["feel good classic soul", "upbeat pop rock retro"], "prompt": "feel-good retro soul with horns and an upbeat groove"},
+        "emotional": {"genres": ["heartland rock", "americana"], "search_terms": ["heartland rock emotional anthem"], "prompt": "heartfelt heartland rock with chiming guitars and a steady build"}
+      }
+    },
+    {
+      "id": "boomers_55plus",
+      "label": "Boomers (55+)",
+      "region": "US / EU",
+      "description": "Nostalgia-driven, lowest interest in new-music discovery (only 9% highly engaged). Melody and clarity win; avoid abrasive or sub-bass-heavy sound.",
+      "platforms": ["TV", "Facebook", "YouTube"],
+      "core_genres": ["easy listening", "classic pop", "jazz", "oldies", "orchestral", "soft rock"],
+      "tempo_range": [60, 110],
+      "energy_range": [0.15, 0.55],
+      "style_keywords": ["strings", "piano", "smooth jazz", "crooner warmth"],
+      "example_artists": ["Michael Bublé", "Norah Jones", "Fleetwood Mac", "Frank Sinatra style"],
+      "mood_overrides": {
+        "happy": {"genres": ["swing", "classic pop"], "search_terms": ["happy swing jazz upbeat retro"], "prompt": "cheerful big-band swing with bright horns and brushed drums"},
+        "calm": {"genres": ["smooth jazz", "easy listening"], "search_terms": ["smooth jazz relaxing piano"], "prompt": "smooth late-night jazz with mellow piano and soft brushes"},
+        "emotional": {"genres": ["orchestral pop", "soft rock"], "search_terms": ["nostalgic orchestral ballad warm"], "prompt": "nostalgic orchestral ballad with warm strings and gentle piano"}
+      }
+    },
+    {
+      "id": "luxury_35plus",
+      "label": "Luxury / Premium (35+)",
+      "region": "Global",
+      "description": "High-income aspirational buyers; research shows slower tempos suit luxury positioning. Sound must feel expensive, spacious, restrained.",
+      "platforms": ["YouTube", "Instagram", "CTV"],
+      "core_genres": ["neo-classical", "downtempo", "cinematic", "deep house", "ambient"],
+      "tempo_range": [60, 115],
+      "energy_range": [0.15, 0.5],
+      "style_keywords": ["sparse piano", "strings", "tasteful minimalism", "deep textures"],
+      "example_artists": ["Ludovico Einaudi", "Ólafur Arnalds", "Cigarettes After Sex", "Massive Attack"],
+      "mood_overrides": {
+        "luxurious": {"genres": ["neo-classical", "downtempo"], "search_terms": ["elegant piano strings minimal", "luxury downtempo cinematic"], "prompt": "elegant minimal piano and strings, spacious and expensive-sounding"},
+        "epic": {"genres": ["cinematic", "orchestral"], "search_terms": ["cinematic orchestral elegant build"], "prompt": "slow-building cinematic orchestral piece with restrained grandeur"},
+        "romantic": {"genres": ["downtempo", "ambient"], "search_terms": ["sensual downtempo ambient"], "prompt": "sensual downtempo with deep textures and intimate atmosphere"}
+      }
+    },
+    {
+      "id": "sports_fitness",
+      "label": "Sports & Fitness (18-40)",
+      "region": "Global",
+      "description": "Gym-goers and athletes; fast tempo maps to action per ad-music research. Sound must drive adrenaline, pace, and triumph.",
+      "platforms": ["YouTube", "TikTok", "Instagram"],
+      "core_genres": ["trap", "drill", "hard rock", "edm", "epic hybrid"],
+      "tempo_range": [120, 175],
+      "energy_range": [0.7, 1.0],
+      "style_keywords": ["heavy 808s", "stadium drums", "risers", "chant vocals"],
+      "example_artists": ["Travis Scott", "Eminem", "Imagine Dragons", "Kanye West"],
+      "mood_overrides": {
+        "hype": {"genres": ["trap", "epic hybrid"], "search_terms": ["epic sport trap workout", "stadium hype anthem"], "prompt": "explosive sports anthem with stadium drums, heavy 808s and risers"},
+        "epic": {"genres": ["epic hybrid", "orchestral trap"], "search_terms": ["epic cinematic trailer drums"], "prompt": "epic hybrid trailer music with pounding percussion and brass"},
+        "uplifting": {"genres": ["edm", "anthem rock"], "search_terms": ["triumphant edm anthem victory"], "prompt": "triumphant EDM anthem that feels like crossing a finish line"}
+      }
+    },
+    {
+      "id": "wellness",
+      "label": "Wellness & Mindfulness (25-50)",
+      "region": "Global",
+      "description": "Yoga, self-care, clean living; converts best at low energy (slow tempo suits healthcare/wellness trust-building per ad research).",
+      "platforms": ["Instagram", "YouTube", "Podcasts"],
+      "core_genres": ["ambient", "neo-classical", "acoustic", "world", "lo-fi"],
+      "tempo_range": [55, 95],
+      "energy_range": [0.1, 0.4],
+      "style_keywords": ["soft pads", "organic warmth", "breathing space", "gentle piano"],
+      "example_artists": ["Bon Iver", "Nils Frahm", "East Forest"],
+      "mood_overrides": {
+        "calm": {"genres": ["ambient", "neo-classical"], "search_terms": ["calm ambient meditation piano"], "prompt": "serene ambient piece with soft piano and warm pads, meditative"},
+        "uplifting": {"genres": ["acoustic", "ambient pop"], "search_terms": ["gentle uplifting morning acoustic"], "prompt": "gentle uplifting acoustic morning-light feeling, hopeful and clean"},
+        "happy": {"genres": ["acoustic", "lo-fi"], "search_terms": ["soft happy acoustic sunny"], "prompt": "softly happy acoustic groove, sunlit and unhurried"}
+      }
+    },
+    {
+      "id": "india_youth",
+      "label": "India Youth (18-30)",
+      "region": "India",
+      "description": "World's largest ad-supported streaming market; Bollywood + Punjabi pop + global pop fluency. Rhythmic hooks and desi-fusion percussion drive engagement.",
+      "platforms": ["Instagram Reels", "YouTube", "JioCinema"],
+      "core_genres": ["bollywood pop", "indi-pop", "punjabi pop", "desi hip hop", "edm fusion"],
+      "tempo_range": [95, 150],
+      "energy_range": [0.55, 0.95],
+      "style_keywords": ["dhol", "tabla fused with 808s", "vocal hooks", "festival energy"],
+      "example_artists": ["Diljit Dosanjh", "Badshah", "Ritviz", "King", "AP Dhillon"],
+      "mood_overrides": {
+        "happy": {"genres": ["indi-pop", "bollywood pop"], "search_terms": ["upbeat indian pop dhol festive", "indi pop happy dance"], "prompt": "festive Indian pop with dhol percussion, bright vocal hooks and dance energy"},
+        "hype": {"genres": ["punjabi pop", "desi hip hop"], "search_terms": ["punjabi bhangra hype beat", "desi hip hop heavy"], "prompt": "high-energy Punjabi bhangra-trap with dhol and heavy bass"},
+        "romantic": {"genres": ["bollywood ballad", "indi-pop"], "search_terms": ["romantic bollywood melody soft"], "prompt": "romantic Indian melody with soft strings, flute and intimate vocals"}
+      }
+    },
+    {
+      "id": "india_family",
+      "label": "India Family (30-55)",
+      "region": "India",
+      "description": "Multi-generational households; melody-led emotional storytelling, film-score and classical-fusion warmth. Arijit Singh-era balladry is the trust register.",
+      "platforms": ["TV", "YouTube", "WhatsApp"],
+      "core_genres": ["bollywood", "hindustani fusion", "film score", "ghazal-influenced pop"],
+      "tempo_range": [70, 120],
+      "energy_range": [0.3, 0.7],
+      "style_keywords": ["sitar", "bansuri flute", "strings", "tabla", "emotional swells"],
+      "example_artists": ["A.R. Rahman", "Arijit Singh", "Shankar-Ehsaan-Loy", "Shreya Ghoshal"],
+      "mood_overrides": {
+        "emotional": {"genres": ["bollywood", "film score"], "search_terms": ["emotional indian strings flute cinematic"], "prompt": "emotional Indian film score with strings, bansuri flute and gentle tabla"},
+        "happy": {"genres": ["bollywood", "fusion"], "search_terms": ["joyful indian family celebration music"], "prompt": "joyful Indian celebration music with melodic vocals and warm percussion"},
+        "uplifting": {"genres": ["hindustani fusion"], "search_terms": ["inspiring indian fusion build"], "prompt": "inspiring Indian fusion that builds from sitar to a full orchestral swell"}
+      }
+    },
+    {
+      "id": "latam_youth",
+      "label": "LATAM Youth (18-30)",
+      "region": "Latin America / US Hispanic",
+      "description": "Latin is 8.2% of global streams and dominant regionally; Mexico and Brazil are top-3 streaming growth markets. Dembow rhythm carries the message.",
+      "platforms": ["TikTok", "Instagram", "YouTube"],
+      "core_genres": ["reggaeton", "latin pop", "latin trap", "cumbia pop", "funk brasileiro", "afrobeats"],
+      "tempo_range": [88, 110],
+      "energy_range": [0.55, 0.9],
+      "style_keywords": ["dembow rhythm", "warm bass", "spanish guitar accents", "percussive groove"],
+      "example_artists": ["Bad Bunny", "Karol G", "Rauw Alejandro", "Feid", "Anitta"],
+      "mood_overrides": {
+        "happy": {"genres": ["latin pop", "reggaeton"], "search_terms": ["feel good latin pop summer", "reggaeton upbeat"], "prompt": "sunny latin pop with a dembow groove and feel-good summer energy"},
+        "hype": {"genres": ["latin trap", "funk brasileiro"], "search_terms": ["latin trap hard club", "baile funk energetic"], "prompt": "club-ready latin trap with heavy low end and confident swagger"},
+        "romantic": {"genres": ["latin r&b", "reggaeton lento"], "search_terms": ["romantic latin rnb slow"], "prompt": "slow romantic latin R&B with smooth vocals and warm guitar"}
+      }
+    },
+    {
+      "id": "urban_hiphop",
+      "label": "Hip-Hop Culture (16-32)",
+      "region": "Global",
+      "description": "Hip-Hop/R&B is the single most-streamed core genre (~30.7% US). Sneaker/streetwear adjacent; production credibility matters more than melody.",
+      "platforms": ["TikTok", "YouTube", "Instagram"],
+      "core_genres": ["hip hop", "trap", "drill", "r&b"],
+      "tempo_range": [70, 150],
+      "energy_range": [0.5, 0.9],
+      "style_keywords": ["808 slides", "crisp hats", "dark pads", "bounce"],
+      "example_artists": ["Drake", "21 Savage", "Metro Boomin", "Central Cee"],
+      "mood_overrides": {
+        "hype": {"genres": ["drill", "trap"], "search_terms": ["dark drill beat hard", "trap banger 808"], "prompt": "menacing drill beat with sliding 808s and icy melodics"},
+        "calm": {"genres": ["r&b", "chill hop"], "search_terms": ["smooth rnb chill beat"], "prompt": "smooth late-night R&B beat with mellow keys"},
+        "luxurious": {"genres": ["hip hop", "r&b"], "search_terms": ["luxury rap beat smooth strings"], "prompt": "luxurious rap instrumental with cinematic strings over crisp drums"}
+      }
+    },
+    {
+      "id": "country_heartland",
+      "label": "Country & Heartland (25-55)",
+      "region": "US",
+      "description": "Country over-indexes in the 35-54 bracket and is a top-5 US genre; truck/outdoor/value-brand affinity. Authenticity, storytelling, grit.",
+      "platforms": ["Facebook", "YouTube", "TV"],
+      "core_genres": ["country", "country rock", "americana", "southern rock"],
+      "tempo_range": [80, 130],
+      "energy_range": [0.35, 0.75],
+      "style_keywords": ["slide guitar", "stomps and claps", "banjo", "open-road feel"],
+      "example_artists": ["Morgan Wallen", "Luke Combs", "Zach Bryan", "Chris Stapleton"],
+      "mood_overrides": {
+        "happy": {"genres": ["country pop"], "search_terms": ["upbeat country summer claps"], "prompt": "upbeat summer country with claps, banjo and an open-road feel"},
+        "epic": {"genres": ["southern rock", "americana"], "search_terms": ["anthemic americana build cinematic"], "prompt": "anthemic americana that builds with stomps, slide guitar and grit"},
+        "emotional": {"genres": ["americana", "country ballad"], "search_terms": ["emotional country ballad acoustic"], "prompt": "heartfelt country ballad with acoustic guitar and warm vocals"}
+      }
+    },
+    {
+      "id": "east_asia_youth",
+      "label": "East Asia Youth (16-28)",
+      "region": "Korea / Japan / SEA",
+      "description": "K-pop is ~half of all South Korean streams; Japan is a top-4 global market. Maximal polish, bright hooks, genre-blending production standards.",
+      "platforms": ["TikTok", "YouTube", "LINE / KakaoTalk"],
+      "core_genres": ["k-pop", "j-pop", "city pop", "future bass", "dance pop"],
+      "tempo_range": [100, 160],
+      "energy_range": [0.55, 0.95],
+      "style_keywords": ["bright synth stacks", "tight vocal layers", "drop choruses"],
+      "example_artists": ["NewJeans", "LE SSERAFIM", "YOASOBI", "Fujii Kaze"],
+      "mood_overrides": {
+        "happy": {"genres": ["k-pop", "city pop"], "search_terms": ["bright kpop style dance pop", "city pop funky bright"], "prompt": "bright polished K-pop style dance track with funky bass and layered hooks"},
+        "hype": {"genres": ["future bass", "dance pop"], "search_terms": ["future bass energetic drop"], "prompt": "energetic future bass with a euphoric supersaw drop"},
+        "playful": {"genres": ["j-pop", "kawaii future bass"], "search_terms": ["playful jpop cute electronic"], "prompt": "playful J-pop style electronic track, cute and hyper-melodic"}
+      }
+    },
+    {
+      "id": "afrobeats_africa",
+      "label": "Afrobeats & Diaspora (16-35)",
+      "region": "West Africa / UK / Global diaspora",
+      "description": "Nigeria is 62.2% local repertoire — the most locally-loyal market in MEA. Afrobeats has crossed over globally via Burna Boy/Wizkid/Rema.",
+      "platforms": ["TikTok", "YouTube", "Audiomack", "Instagram"],
+      "core_genres": ["afrobeats", "amapiano", "afro-fusion", "afro r&b", "highlife"],
+      "tempo_range": [95, 120],
+      "energy_range": [0.5, 0.85],
+      "style_keywords": ["log drums", "syncopated percussion", "warm vocal melodies", "groove-first"],
+      "example_artists": ["Burna Boy", "Rema", "Tems", "Asake", "Tyla"],
+      "mood_overrides": {
+        "happy": {"genres": ["afrobeats", "highlife"], "search_terms": ["feel good afrobeats sunny", "afrobeat upbeat groove"], "prompt": "sunny feel-good afrobeats with syncopated percussion and warm vocal melody"},
+        "hype": {"genres": ["amapiano", "afro-fusion"], "search_terms": ["amapiano log drum energetic"], "prompt": "driving amapiano groove with log drums and rolling bass"},
+        "romantic": {"genres": ["afro r&b"], "search_terms": ["afro rnb smooth romantic"], "prompt": "smooth afro-R&B with intimate vocals and a gentle dembow-adjacent sway"}
+      }
+    },
+    {
+      "id": "mena_youth",
+      "label": "MENA Youth (18-32)",
+      "region": "Middle East / North Africa",
+      "description": "Arabic pop and franco-arabe rap dominate locally; maqam-inflected melody over trap-influenced production is the crossover register.",
+      "platforms": ["TikTok", "Instagram", "Anghami", "YouTube"],
+      "core_genres": ["arabic pop", "arabic trap", "rai", "khaleeji pop", "franco-arabe rap"],
+      "tempo_range": [90, 140],
+      "energy_range": [0.45, 0.85],
+      "style_keywords": ["oud and strings over 808s", "darbuka percussion", "melismatic vocal hooks"],
+      "example_artists": ["Amr Diab", "Wegz", "Saint Levant", "Elyanna"],
+      "mood_overrides": {
+        "happy": {"genres": ["arabic pop", "khaleeji pop"], "search_terms": ["upbeat arabic pop festive"], "prompt": "festive Arabic pop with darbuka percussion and a bright melismatic hook"},
+        "hype": {"genres": ["arabic trap"], "search_terms": ["arabic trap oud 808"], "prompt": "Arabic trap with oud riffs over heavy 808s"},
+        "romantic": {"genres": ["arabic pop ballad"], "search_terms": ["romantic arabic strings ballad"], "prompt": "romantic Arabic ballad with lush strings and expressive vocal melody"}
+      }
+    }
+  ]
+}
