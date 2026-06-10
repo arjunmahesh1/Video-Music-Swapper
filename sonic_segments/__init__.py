@@ -1,11 +1,6 @@
-"""Sonic Segments MVP service layer.
-
-This package wraps the current repo's audio-analysis, voice-preservation,
-and rendering code in a cleaner product-oriented API.
-"""
+"""Sonic Segments MVP service layer."""
 
 from .models import AdAnalysis, BrandProfile, TrackCandidate, VariantRender, VoiceoverAnalysis
-from .service import SonicSegmentsService
 
 __all__ = [
     "AdAnalysis",
@@ -15,3 +10,12 @@ __all__ = [
     "VariantRender",
     "VoiceoverAnalysis",
 ]
+
+
+def __getattr__(name: str):
+    """Load heavy audio dependencies only when the service is requested."""
+    if name == "SonicSegmentsService":
+        from .service import SonicSegmentsService
+
+        return SonicSegmentsService
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

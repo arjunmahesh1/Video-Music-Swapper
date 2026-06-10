@@ -40,6 +40,8 @@ It is additive and wraps the existing modules instead of replacing them.
   - thin wrappers around the current repo functions
 - `sonic_segments/service.py`
   - analysis, rendering, and audit orchestration
+- `sonic_segments/audit.py`
+  - command-line entrypoint for manual pilot audits
 - `sonic_segments/reports.py`
   - markdown audit generation
 - `sonic_segments/catalogs/manual.py`
@@ -79,11 +81,12 @@ Done in this pass:
 
 ### Phase 2: manual pilot workflow
 
-Next:
+Done in this pass:
 
-1. add a small CLI or admin page that runs `SonicSegmentsService.create_audit_bundle(...)`
-2. point it at a local folder of royalty-cleared tracks
-3. generate 3 to 5 variants plus `sonic_audit.md`
+- added a CLI that runs `SonicSegmentsService.create_audit_bundle(...)`
+- supports analysis-only audits
+- supports local-folder variant renders
+- keeps voice preservation opt-in because it is slower
 
 ### Phase 3: productization
 
@@ -121,6 +124,55 @@ analysis, variants, report_path = service.create_audit_bundle(
     tracks=tracks,
     preserve_voiceover=True,
 )
+```
+
+## CLI usage
+
+Install the project dependencies before running audio jobs:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Fast analysis-only audit:
+
+```bash
+python -m sonic_segments.audit \
+  --video "video/Starbucks.mp4" \
+  --output-dir "output/starbucks_audit" \
+  --brand-name "Starbucks" \
+  --category "coffee" \
+  --vibe "calm, premium, cozy" \
+  --energy-min 0.15 \
+  --energy-max 0.40 \
+  --tempo-min 60 \
+  --tempo-max 95 \
+  --genres "piano, acoustic, ambient"
+```
+
+Render local-track variants without preserving original voiceover:
+
+```bash
+python -m sonic_segments.audit \
+  --video "video/Starbucks.mp4" \
+  --output-dir "output/starbucks_audit" \
+  --tracks-dir "audio" \
+  --variant-limit 3 \
+  --brand-name "Starbucks" \
+  --vibe "calm, premium, cozy"
+```
+
+Render variants with voiceover preservation:
+
+```bash
+python -m sonic_segments.audit \
+  --video "video/Gatorade.mp4" \
+  --output-dir "output/gatorade_audit" \
+  --tracks-dir "audio" \
+  --variant-limit 1 \
+  --preserve-voiceover \
+  --brand-name "Gatorade" \
+  --vibe "high-energy sports"
 ```
 
 ## Why this organization works
