@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sonic Segments — Re-score your ad per audience</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <div class="wordmark">SONIC<em>SEGMENTS</em></div>
+    <a id="spotifyChip" class="spotify-chip" href="/spotify/login">Spotify: checking…</a>
+  </header>
+
+  <section class="hero">
+    <h1>Brands A/B test everything.<br><span class="grad">Except the music.</span></h1>
+    <p class="sub">
+      Audio is half of your ad experience and gets none of the optimization. Sonic Segments
+      analyzes your ad's sound, keeps your voiceover, and swaps the music bed — one re-scored
+      cut per audience you target, ready to A/B test.
+    </p>
+    <div class="stats">
+      <div class="stat"><b>+27%</b> recall for musically-fitting ads</div>
+      <div class="stat"><b>1 cut</b> per target demographic</div>
+      <div class="stat"><b>Voiceover preserved</b> neural source separation</div>
+      <div class="stat"><b>No login</b> drop a file, get variants</div>
+    </div>
+  </section>
+
+  <form id="intakeForm">
+    <div class="card">
+      <h2><span class="step-num">1</span>Your ad</h2>
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="videoFile" accept=".mp4,.mov,.m4v,.webm" hidden>
+        <div id="dropLabel"><b>Drop your ad file here</b> or click to browse<br>
+          <span style="font-size:13px">MP4 preferred — full quality scores best</span></div>
+      </div>
+      <div class="or-sep">— or paste a hosted link (YouTube, Drive, Meta Ads Library) —</div>
+      <input type="url" id="adUrl" placeholder="https://...">
+      <div class="row">
+        <div><label class="fld">Brand</label><input type="text" id="brand" placeholder="e.g. Gatorade"></div>
+        <div><label class="fld">One line on the vibe</label><input type="text" id="vibe" placeholder="e.g. gritty training montage, triumph at the end"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-num">2</span>What are we making?</h2>
+      <div class="mode-grid">
+        <div class="mode-card" data-mode="demo" id="modeDemo">
+          <h3>Personal demo <span class="badge demo">DEMO</span></h3>
+          <p>Connect Spotify and we re-score the ad with a song <b>you actually listen to</b>,
+             matched to the mood you pick. The instant "imagine this for every viewer" pitch.</p>
+        </div>
+        <div class="mode-card active" data-mode="variants" id="modeVariants">
+          <h3>Scored variants <span class="badge legal">CAMPAIGN</span></h3>
+          <p>Pick target demographics and mood. We cut <b>one re-scored version per audience</b>
+             — hyperpop for Gen-Z, warm acoustic for parents — each cut maps to an ad set.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-num">3</span>Mood</h2>
+      <div class="chips" id="moodChips"></div>
+    </div>
+
+    <div class="card" id="demoCard" style="display:none">
+      <h2><span class="step-num">4</span>Audiences <span style="color:var(--muted);text-transform:none;letter-spacing:0">(one cut each, max 5)</span></h2>
+      <div class="demo-grid" id="demoGrid"></div>
+      <div class="cap-note" id="capNote">0 of 5 selected</div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-num" id="srcStep">5</span>Where the music comes from</h2>
+      <div class="src-list" id="srcList"></div>
+      <div id="refQueryWrap" style="display:none">
+        <label class="fld">Reference track to chase (optional — e.g. "SICKO MODE Travis Scott")</label>
+        <input type="text" id="refQuery" placeholder="Leave blank to auto-pick from the audience brief">
+      </div>
+      <div id="ownTrackWrap" style="display:none">
+        <label class="fld">Your track file</label>
+        <input type="file" id="ownTrack" accept=".mp3,.wav,.m4a,.aac,.flac,.ogg">
+      </div>
+    </div>
+
+    <div style="margin: 28px 0 60px">
+      <button class="btn" type="submit" id="submitBtn">Re-score my ad →</button>
+      <div class="err" id="err"></div>
+    </div>
+  </form>
+
+  <footer class="site">Sonic Segments — audio is 50% of the ad experience. Give it more than 0% of the optimization.</footer>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

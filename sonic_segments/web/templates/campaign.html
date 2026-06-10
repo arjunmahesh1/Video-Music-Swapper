@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Re-scoring… — Sonic Segments</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <a class="wordmark" href="/">SONIC<em>SEGMENTS</em></a>
+  </header>
+
+  <div class="card" style="margin-top:48px">
+    <h2 id="title"><span class="spinner"></span>Re-scoring your ad</h2>
+    <p style="color:var(--muted);font-size:14.5px">
+      Separating the voiceover, profiling the sound, sourcing music per audience, and rendering.
+      Heavy lifting happens locally — a campaign with several cuts can take a few minutes.
+    </p>
+    <div class="progress-track"><div class="progress-bar" id="bar"></div></div>
+    <ul class="timeline" id="timeline"></ul>
+    <div class="err" id="err"></div>
+    <div class="dl-row" id="doneRow" style="display:none">
+      <a class="btn" id="previewLink" href="#">Open the before / after preview →</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const jobId = {{ job_id | tojson }};
+const timeline = document.getElementById("timeline");
+
+async function poll() {
+  try {
+    const job = await (await fetch(`/api/campaigns/${jobId}`)).json();
+    timeline.innerHTML = job.events.map(e => `<li>${e.msg}</li>`).join("");
+    const pct = [...job.events].reverse().find(e => e.pct != null);
+    if (pct) document.getElementById("bar").style.width = Math.max(2, pct.pct) + "%";
+
+    if (job.status === "done") {
+      document.getElementById("title").textContent = "Done — your cuts are ready";
+      document.getElementById("bar").style.width = "100%";
+      const link = document.getElementById("previewLink");
+      link.href = `/preview/${jobId}`;
+      document.getElementById("doneRow").style.display = "flex";
+      setTimeout(() => (window.location.href = link.href), 1800);
+      return;
+    }
+    if (job.status === "error") {
+      document.getElementById("title").textContent = "This run failed";
+      document.getElementById("err").textContent = job.error || "Unknown error.";
+      return;
+    }
+  } catch (e) { /* transient network issues: keep polling */ }
+  setTimeout(poll, 2000);
+}
+poll();
+</script>
+</body>
+</html>

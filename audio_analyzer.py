@@ -51,6 +51,7 @@ def analyze_audio_features(audio_path):
 
     # Extract tempo using percussive component (more accurate)
     tempo, _ = librosa.beat.beat_track(y=y_percussive, sr=sr)
+    tempo = float(np.atleast_1d(tempo)[0])  # librosa >=0.10 returns an array
 
     # Calculate energy (RMS) - normalized
     rms = librosa.feature.rms(y=y)[0]

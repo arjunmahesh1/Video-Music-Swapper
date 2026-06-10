@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ m.brand or "Your ad" }} — re-scored — Sonic Segments</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <a class="wordmark" href="/">SONIC<em>SEGMENTS</em></a>
+    <button class="btn secondary" onclick="navigator.clipboard.writeText(location.href); this.textContent='Link copied ✓'">Share this preview</button>
+  </header>
+
+  <h1 style="font-size:30px;margin:8px 0 4px">{{ m.brand or "Your ad" }}, re-scored.</h1>
+  <p style="color:var(--muted)">Tap a cut to flip the audio instantly. Same voiceover — different music, per audience.</p>
+
+  <div class="player-shell" style="margin-top:18px">
+    <video id="player" controls playsinline src="/media/{{ m.id }}/{{ m.original }}"></video>
+  </div>
+
+  <div class="variant-pills" id="pills">
+    <div class="pill original active" data-src="/media/{{ m.id }}/{{ m.original }}">Original</div>
+    {% for v in m.variants %}
+    <div class="pill" data-src="/media/{{ m.id }}/{{ v.file }}">{{ v.label }}</div>
+    {% endfor %}
+    <button class="pill flip-btn" id="flipBtn" type="button">⇄ A/B flip</button>
+  </div>
+
+  <div class="card">
+    <h2>What your ad sounds like today</h2>
+    <div class="meta-grid">
+      <div class="meta-box"><span>Current mood</span><b>{{ m.analysis.mood.primary_label }}</b></div>
+      <div class="meta-box"><span>Tempo</span><b>{{ m.analysis.mood.tempo | round | int }} BPM</b></div>
+      <div class="meta-box"><span>Energy</span><b>{{ m.analysis.mood.energy }}</b></div>
+      <div class="meta-box"><span>Narration coverage</span><b>{{ (m.analysis.speech.coverage_ratio * 100) | round | int }}%</b></div>
+      {% if m.analysis.mode_major is not none %}
+      <div class="meta-box"><span>Key feel</span><b>{{ "Major" if m.analysis.mode_major > 0.5 else "Minor" }}</b></div>
+      {% endif %}
+    </div>
+    {% for w in m.quality_warnings %}<div class="warn-line">⚠ {{ w }}</div>{% endfor %}
+  </div>
+
+  <div class="card">
+    <h2>The cuts ({{ m.variants | length }})</h2>
+    {% for v in m.variants %}
+    <div class="variant-detail">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <b style="font-size:17px">{{ v.label }}</b>
+        {% if v.track.demo_only %}<span class="badge demo">DEMO ONLY — NOT CLEARED</span>
+        {% else %}<span class="badge legal">CLEARED</span>{% endif %}
+      </div>
+      <p class="kv" style="margin-top:6px">
+        Track: <b>{{ v.track.name }}{% if v.track.artist %} — {{ v.track.artist }}{% endif %}</b>
+        · via {{ v.track.source }} · {{ v.track.license }}
+      </p>
+      <div class="scorebar-track"><div class="scorebar" style="width: {{ (v.match.total * 100) | round | int }}%"></div></div>
+      <p class="kv">
+        Fit <b>{{ (v.match.total * 100) | round | int }}%</b>
+        {% if v.match.style_fit is not none %} · style {{ (v.match.style_fit * 100) | round | int }}%{% endif %}
+        · mood {{ (v.match.mood_fit * 100) | round | int }}%
+        · tempo {{ (v.match.tempo_fit * 100) | round | int }}%
+        · energy {{ (v.match.energy_fit * 100) | round | int }}%
+      </p>
+      <p class="kv" style="margin-top:4px">{{ v.match.explanation }}</p>
+      {% if v.runner_ups %}
+      <p class="kv" style="margin-top:4px">Runner-ups:
+        {% for r in v.runner_ups %}{{ r.name }} ({{ (r.score * 100) | round | int }}%){{ ", " if not loop.last }}{% endfor %}
+      </p>
+      {% endif %}
+      <div class="dl-row">
+        <a class="btn secondary" href="/media/{{ m.id }}/{{ v.file }}" download>Download this cut</a>
+      </div>
+    </div>
+    {% endfor %}
+    <div class="dl-row" style="margin-top:20px">
+      <a class="btn secondary" href="/media/{{ m.id }}/{{ m.original }}" download>Download original</a>
+      <a class="btn" href="/">Re-score another ad →</a>
+    </div>
+  </div>
+
+  <footer class="site">Re-scored by Sonic Segments. Demo-only cuts carry an audible watermark and are not licensed for delivery.</footer>
+</div>
+
+<script>
+const player = document.getElementById("player");
+const pills = [...document.querySelectorAll(".pill[data-src]")];
+let lastVariant = pills[1] || pills[0];
+
+function swapTo(pill) {
+  if (!pill || pill.dataset.src === player.currentSrc) return;
+  const t = player.currentTime, playing = !player.paused;
+  pills.forEach(p => p.classList.toggle("active", p === pill));
+  if (!pill.classList.contains("original")) lastVariant = pill;
+  player.src = pill.dataset.src;
+  player.currentTime = t;
+  if (playing) player.play();
+}
+
+pills.forEach(p => p.onclick = () => swapTo(p));
+
+document.getElementById("flipBtn").onclick = () => {
+  const onOriginal = pills[0].classList.contains("active");
+  swapTo(onOriginal ? lastVariant : pills[0]);
+};
+
+// seek restore on metadata (some browsers reset currentTime on src change)
+let pendingSeek = null;
+player.addEventListener("loadedmetadata", () => {
+  if (pendingSeek != null) { player.currentTime = pendingSeek; pendingSeek = null; }
+});
+</script>
+</body>
+</html>

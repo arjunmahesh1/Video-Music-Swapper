@@ -53,7 +53,10 @@ class ClapEngine:
     def embed_audio(self, audio_path: str | Path, offset: float = 0.0) -> np.ndarray:
         import librosa
 
-        key = f"{Path(audio_path).resolve()}::{offset}"
+        p = Path(audio_path)
+        stat = p.stat()
+        # mtime+size in the key: callers reuse fixed temp paths for different media
+        key = f"{p.resolve()}::{stat.st_mtime_ns}::{stat.st_size}::{offset}"
         cached = self._audio_cache.get(key)
         if cached is not None:
             return cached
@@ -61,9 +64,10 @@ class ClapEngine:
         waveform, _ = librosa.load(
             str(audio_path), sr=CLAP_SAMPLE_RATE, mono=True, offset=offset, duration=MAX_AUDIO_SECONDS
         )
-        inputs = self.processor(audios=waveform, sampling_rate=CLAP_SAMPLE_RATE, return_tensors="pt")
+        inputs = self.processor(audio=waveform, sampling_rate=CLAP_SAMPLE_RATE, return_tensors="pt")
         with self.torch.no_grad():
             emb = self.model.get_audio_features(**{k: v.to(self.device) for k, v in inputs.items()})
+        emb = getattr(emb, "pooler_output", emb)  # transformers >=5 returns an output object
         vec = emb[0].cpu().numpy()
         vec = vec / (np.linalg.norm(vec) + 1e-9)
         if len(self._audio_cache) > 256:
@@ -80,6 +84,7 @@ class ClapEngine:
         inputs = self.processor(text=texts, return_tensors="pt", padding=True)
         with self.torch.no_grad():
             emb = self.model.get_text_features(**{k: v.to(self.device) for k, v in inputs.items()})
+        emb = getattr(emb, "pooler_output", emb)  # transformers >=5 returns an output object
         mat = emb.cpu().numpy()
         mat = mat / (np.linalg.norm(mat, axis=1, keepdims=True) + 1e-9)
         self._text_cache[key] = mat
