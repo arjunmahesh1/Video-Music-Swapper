@@ -1,9 +1,73 @@
 # Sonic Segments MVP
 
-This repo now has two layers:
+> **The product site is live.** Run it with:
+>
+> ```bash
+> python -m uvicorn sonic_segments.web.main:app --port 8000
+> ```
+>
+> then open http://localhost:8000. See "The Platform" below.
+
+## The Platform
+
+The repo now hosts the full Sonic Segments product on top of the original engine:
+
+```
+sonic_segments/
+  intelligence/   # local SOTA reasoning (no online APIs)
+    clap_model.py   - LAION CLAP zero-shot audio-text engine (lazy singleton)
+    mood.py         - 10-mood taxonomy; CLAP + DSP fusion; major/minor valence prior
+    demographics.py - 16-segment demographic -> music-direction knowledge base
+    matching.py     - track-vs-brief scoring (style/mood/tempo/energy)
+    quality.py      - ffprobe compression red-flags for pulled sources
+  data/demographics.json  # research-grounded KB (sources cited in _meta)
+  sources/        # unified MusicSource interface
+    local_catalog.py  - your licensed folders (audio/, library/)   [CLEARED]
+    jamendo.py        - Creative Commons API catalog               [CLEARED, needs JAMENDO_CLIENT_ID]
+    uploaded.py       - customer-provided track                    [CLEARED]
+    musicgen.py       - local Meta MusicGen generation             [CLEARED]
+    spotify_personal.py - songs YOU listen to, mood-matched        [DEMO ONLY]
+    reference.py      - uncleared reference pulls                  [DEMO ONLY, watermarked]
+  pipeline/
+    ingest.py   - upload or yt-dlp URL pull + quality flagging
+    jobs.py     - persistent job store, serial heavy-work executor
+    campaign.py - analyze once -> direction per (demographic, mood) -> source/rank/render
+  web/          - FastAPI site: intake one-pager, status page, A/B preview
+```
+
+### The two flows
+
+1. **Personal demo** — connect Spotify, pick a mood; the ad is re-scored with a
+   track from *your* library whose audio actually matches that mood
+   (metadata prefilter -> download pool -> CLAP verification). Demo-only.
+2. **Scored variants** — pick up to 5 target demographics plus mood(s); one
+   re-scored cut per audience, music direction resolved by the demographics KB
+   (e.g. India Youth + happy -> festive indi-pop with dhol percussion).
+
+Every render preserves the original voiceover via the existing Demucs
+separation + ducking engine. Results land on a shareable `/preview/{id}` page
+with an instant A/B audio flip.
+
+### Environment keys (.env)
+
+- `SPOTIPY_CLIENT_ID` / `SPOTIPY_CLIENT_SECRET` / `SPOTIPY_REDIRECT_URI` — Spotify (existing)
+- `JAMENDO_CLIENT_ID` — free key from devportal.jamendo.com; enables the legal catalog source
+- `CLAP_MODEL_ID` — optional override (default `laion/larger_clap_music_and_speech`)
+
+### Benchmarks
+
+`python -m eval.mood_benchmark` scores mood detection against 13 hand-labeled
+sample ads; `--stem` runs the production path (Demucs music stem). Current
+full-mix numbers: 54% top-1, 92% top-3 (CLAP+DSP) vs 23%/85% DSP-only.
+
+---
+
+## Original layering notes
+
+This repo has two layers:
 
 1. the current app layer
-2. the new MVP/service layer
+2. the MVP/service layer
 
 The goal is to organize the work without breaking the current Streamlit product.
 

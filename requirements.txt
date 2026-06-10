@@ -8,5 +8,12 @@ librosa
 numpy
 scipy
 demucs
+diffq
 faster-whisper
 huggingface_hub>=0.23.0
+transformers
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+requests
