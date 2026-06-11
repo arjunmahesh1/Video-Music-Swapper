@@ -212,11 +212,11 @@ function startWaves() {
   // modulated by drifting pseudo-noise, so peaks burst and decay irregularly
   // like a real recording instead of a uniform sine.
   const layers = [
-    { cycles: 46, speed: 0.45, color: "139,92,246", alpha: 0.20, width: 1.5, amp: 0.16, seed: 1.0, glow: 5 },  // hyper purple
-    { cycles: 64, speed: 0.65, color: "56,189,248", alpha: 0.16, width: 1.2, amp: 0.12, seed: 7.3, glow: 4 },  // light blue
-    { cycles: 34, speed: 0.30, color: "13,148,136", alpha: 0.15, width: 1.4, amp: 0.14, seed: 13.7, glow: 0 }, // teal
-    { cycles: 88, speed: 0.85, color: "16,24,40",   alpha: 0.07, width: 1.0, amp: 0.09, seed: 23.1, glow: 0 }, // ink detail
-    { cycles: 24, speed: 0.22, color: "139,92,246", alpha: 0.06, width: 2.4, amp: 0.20, seed: 31.9, glow: 0 }, // purple halo
+    { cycles: 46, speed: 0.45, color: "139,92,246", alpha: 0.36, width: 1.7, amp: 0.26, seed: 1.0, glow: 8 },  // hyper purple
+    { cycles: 64, speed: 0.65, color: "56,189,248", alpha: 0.28, width: 1.3, amp: 0.20, seed: 7.3, glow: 6 },  // light blue
+    { cycles: 34, speed: 0.30, color: "13,148,136", alpha: 0.26, width: 1.6, amp: 0.23, seed: 13.7, glow: 0 }, // teal
+    { cycles: 88, speed: 0.85, color: "16,24,40",   alpha: 0.10, width: 1.0, amp: 0.14, seed: 23.1, glow: 0 }, // ink detail
+    { cycles: 24, speed: 0.22, color: "139,92,246", alpha: 0.10, width: 2.6, amp: 0.32, seed: 31.9, glow: 0 }, // purple halo
   ];
 
   // smooth drifting noise in [-1, 1] built from incommensurate sines
