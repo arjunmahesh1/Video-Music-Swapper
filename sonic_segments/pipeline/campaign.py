@@ -152,7 +152,10 @@ def run_campaign(job: Job) -> dict[str, Any]:
         out_name = f"{idx:02d}_{direction.segment_id}_{direction.mood}.mp4"
         job.log(f"  Rendering re-scored cut (separation + ducking + mux)...", pct=pct + span // 2)
         try:
-            render = _render(video_path, Path(winner["audio_path"]), job.dir / "variants" / out_name)
+            render = _render(
+                video_path, Path(winner["audio_path"]), job.dir / "variants" / out_name,
+                transcript=params.get("transcript"),
+            )
         except Exception as exc:
             job.log(f"  ! Render failed for {label}: {exc}")
             continue
@@ -250,7 +253,7 @@ def _speech_summary(stems: dict[str, Path], duration: float) -> dict[str, Any]:
     }
 
 
-def _render(video_path: Path, music_path: Path, output_path: Path):
+def _render(video_path: Path, music_path: Path, output_path: Path, transcript: str | None = None):
     from ..service import SonicSegmentsService
 
     service = SonicSegmentsService()
@@ -259,4 +262,5 @@ def _render(video_path: Path, music_path: Path, output_path: Path):
         music_path=music_path,
         output_path=output_path,
         preserve_voiceover=True,
+        transcript_hint_text=transcript,
     )

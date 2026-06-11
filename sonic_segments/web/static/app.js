@@ -33,14 +33,15 @@ async function init() {
 
   const flag = new URLSearchParams(location.search).get("spotify");
   if (flag) {
-    setMode("demo"); // they came back from Spotify auth: land them in the demo flow
+    setMode("demo"); // full-page auth fallback: land them back in the demo flow
+    restoreDraft(); //  ...with everything they had typed (file needs re-attaching)
     if (flag !== "connected") {
       $("err").textContent =
         flag === "denied"
           ? "Spotify authorization was cancelled."
           : "Spotify connection failed — try again, and check the redirect URI in your Spotify dashboard.";
-    } else if (state.spotify.connected) {
-      $("err").textContent = "";
+    } else {
+      $("err").textContent = state.file ? "" : "Connected — re-attach your video file and you're set.";
     }
     history.replaceState(null, "", "/#intake");
   } else {
@@ -107,8 +108,8 @@ function renderSources() {
     if (isSpotify) {
       extra = spotifyReady
         ? `<span class="spotify-connected">✓ Connected as ${state.spotify.user}</span>
-           <a href="/spotify/login" style="font-size:12px;margin-left:8px">switch account</a>`
-        : `<a class="spotify-connect" href="/spotify/login">Connect Spotify</a>`;
+           <a href="#" class="spotify-switch" style="font-size:12px;margin-left:8px">switch account</a>`
+        : `<a class="spotify-connect" href="#">Connect Spotify</a>`;
     }
     const reason = !usable && !isSpotify ? " — " + s.reason : "";
 
@@ -124,7 +125,13 @@ function renderSources() {
     };
     cb.checked = usable && state.sources.has(id);
     item.onclick = (e) => {
-      if (e.target.closest("a")) return; // let auth/switch links navigate
+      const connectLink = e.target.closest(".spotify-connect, .spotify-switch");
+      if (connectLink) {
+        e.preventDefault();
+        spotifyAuth(connectLink.classList.contains("spotify-switch"));
+        return;
+      }
+      if (e.target.closest("a")) return;
       if (!usable) return;
       if (e.target !== cb) cb.checked = !cb.checked;
       sync();
@@ -151,6 +158,61 @@ function setMode(mode) {
 
 $("modeDemo").onclick = () => setMode("demo");
 $("modeVariants").onclick = () => setMode("variants");
+
+/* ---- Spotify auth in a popup: the form never reloads ---- */
+function spotifyAuth(switchAccount) {
+  saveDraft();
+  const pop = window.open(
+    switchAccount ? "https://accounts.spotify.com/logout" : "/spotify/login",
+    "spotify-auth",
+    "width=520,height=720"
+  );
+  if (switchAccount && pop) {
+    // give the logout a beat, then start a fresh authorization in the popup
+    setTimeout(() => { try { pop.location = "/spotify/login"; } catch (e) {} }, 1100);
+  }
+}
+
+window.addEventListener("message", async (e) => {
+  if (e.origin !== window.location.origin || typeof e.data !== "string" || !e.data.startsWith("spotify:")) return;
+  const status = e.data.split(":")[1];
+  state.spotify = await fetch("/api/spotify/status").then((r) => r.json()).catch(() => ({ connected: false }));
+  renderSources();
+  $("err").textContent =
+    status === "connected" ? "" :
+    status === "denied" ? "Spotify authorization was cancelled." :
+    "Spotify connection failed — check the redirect URI in your Spotify dashboard.";
+});
+
+/* ---- draft persistence: survives any full-page auth fallback ---- */
+const DRAFT_KEY = "sonic_draft";
+function saveDraft() {
+  localStorage.setItem(DRAFT_KEY, JSON.stringify({
+    ts: Date.now(), mode: state.mode,
+    brand: $("brand").value, vibe: $("vibe").value, url: $("adUrl").value,
+    transcript: $("transcript").value, refQuery: $("refQuery").value,
+    moods: [...state.moods], demographics: [...state.demographics], sources: [...state.sources],
+  }));
+}
+function restoreDraft() {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
+    if (!d || Date.now() - d.ts > 3600e3) return;
+    $("brand").value = d.brand || ""; $("vibe").value = d.vibe || "";
+    $("adUrl").value = d.url || ""; $("transcript").value = d.transcript || "";
+    $("refQuery").value = d.refQuery || "";
+    state.moods = new Set(d.moods || []);
+    state.demographics = new Set(d.demographics || []);
+    [...$("moodChips").children].forEach((chip, i) =>
+      chip.classList.toggle("active", state.moods.has(state.meta.moods[i].id)));
+    [...$("demoGrid").children].forEach((card, i) =>
+      card.classList.toggle("active", state.demographics.has(state.meta.segments[i].id)));
+    $("capNote").textContent = `${state.demographics.size} of ${MAX_DEMOS} selected`;
+    setMode(d.mode || "variants");
+    state.sources = new Set(d.sources || []);
+    renderSources();
+  } catch (e) { /* corrupt draft: ignore */ }
+}
 
 /* dropzone */
 const dz = $("dropzone");
@@ -188,6 +250,7 @@ $("intakeForm").onsubmit = async (e) => {
   fd.append("demographics", [...state.demographics].join(","));
   fd.append("sources", [...state.sources].join(","));
   fd.append("reference_query", $("refQuery").value);
+  fd.append("transcript", $("transcript").value);
   if (state.file) fd.append("video", state.file);
   if ($("ownTrack").files[0]) fd.append("own_track", $("ownTrack").files[0]);
 

@@ -90,6 +90,7 @@ async def create_campaign(
     demographics: str = Form(""),
     sources: str = Form(""),
     reference_query: str = Form(""),
+    transcript: str = Form(""),
     video: UploadFile | None = File(None),
     own_track: UploadFile | None = File(None),
 ):
@@ -119,6 +120,7 @@ async def create_campaign(
         "demographics": demo_list,
         "sources": source_list,
         "reference_query": reference_query.strip() or None,
+        "transcript": transcript.strip() or None,
         "uploaded_tracks": [str(staged_track)] if staged_track else [],
     }
     job = JobStore.get().submit("campaign", params, prepare_and_run)
@@ -175,12 +177,25 @@ def spotify_callback(code: str = "", error: str = ""):
     from spotify_helper import SpotifyManager
 
     if error or not code:
-        return RedirectResponse(f"/?spotify=denied#intake")
-    try:
-        ok = SpotifyManager().handle_redirect_code(code)
-    except Exception:
-        ok = False
-    return RedirectResponse(f"/?spotify={'connected' if ok else 'failed'}#intake")
+        status = "denied"
+    else:
+        try:
+            status = "connected" if SpotifyManager().handle_redirect_code(code) else "failed"
+        except Exception:
+            status = "failed"
+    # Auth runs in a popup so the intake form never reloads; notify the
+    # opener and close. Full-page navigations fall back to the redirect.
+    html = f"""<!doctype html><body style="font-family:sans-serif;padding:30px">
+    Spotify: {status}. You can close this window.
+    <script>
+      if (window.opener) {{
+        window.opener.postMessage("spotify:{status}", window.location.origin);
+        window.close();
+      }} else {{
+        window.location.replace("/?spotify={status}#intake");
+      }}
+    </script></body>"""
+    return HTMLResponse(html)
 
 
 # ---------- helpers ---------------------------------------------------------

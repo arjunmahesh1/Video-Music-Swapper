@@ -156,11 +156,18 @@ def _models_for_current_run(model=None):
         return [(model, model)]
 
     if torch.cuda.is_available():
-        return DEMUCS_MODELS
+        models = list(DEMUCS_MODELS)
+    else:
+        # CPU-only default: skip heavier models to reduce OOM and latency.
+        heavy_opt_in = os.getenv("DEMUCS_ENABLE_HEAVY_MODELS", "0").strip().lower() in {"1", "true", "yes"}
+        models = list(DEMUCS_MODELS) if heavy_opt_in else list(DEMUCS_MODELS[:2])
 
-    # CPU-only default: skip heavier models to reduce OOM and latency.
-    heavy_opt_in = os.getenv("DEMUCS_ENABLE_HEAVY_MODELS", "0").strip().lower() in {"1", "true", "yes"}
-    return DEMUCS_MODELS if heavy_opt_in else DEMUCS_MODELS[:2]
+    # DEMUCS_PREFERRED_MODEL jumps a specific model (e.g. htdemucs) to the
+    # front of the ladder; the rest stay as fallbacks.
+    preferred = os.getenv("DEMUCS_PREFERRED_MODEL", "").strip()
+    if preferred:
+        models = [(preferred, preferred)] + [m for m in models if m[0] != preferred]
+    return models
 
 
 def _run_checked(cmd, timeout=None, env=None, step_name="Command"):
@@ -1823,7 +1830,11 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         _run_checked(cmd, timeout=ffmpeg_timeout, step_name="Speech extraction (fallback gate)")
     else:
         # Build FFmpeg filter: keep ONLY detected speech windows.
-        enable_conds = [f"between(t,{s:.3f},{e:.3f})" for s, e in speech_segments]
+        # Pad each window so words straddling a boundary are not clipped.
+        pad_pre, pad_post = 0.30, 0.45
+        enable_conds = [
+            f"between(t,{max(0.0, s - pad_pre):.3f},{e + pad_post:.3f})" for s, e in speech_segments
+        ]
         enable_expr = "+".join(enable_conds)
         speech_mask_filter = (
             f"volume=enable='{enable_expr}':volume=1,"
