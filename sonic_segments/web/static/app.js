@@ -208,37 +208,48 @@ function startWaves() {
   window.addEventListener("resize", resize);
   resize();
 
-  // layered waves: coral, teal, ink — quiet on the left (under the copy), louder right
-  const waves = [
-    { amp: 0.10, freq: 2.2, speed: 0.55, phase: 0.0, color: "255,90,54",  alpha: 0.30, width: 1.8 },
-    { amp: 0.16, freq: 1.4, speed: 0.34, phase: 2.1, color: "13,148,136", alpha: 0.22, width: 1.6 },
-    { amp: 0.07, freq: 3.1, speed: 0.85, phase: 4.0, color: "16,24,40",   alpha: 0.10, width: 1.2 },
-    { amp: 0.22, freq: 0.9, speed: 0.22, phase: 1.0, color: "255,90,54",  alpha: 0.10, width: 2.4 },
-    { amp: 0.13, freq: 1.8, speed: 0.45, phase: 5.2, color: "13,148,136", alpha: 0.10, width: 1.2 },
+  // Audio-style waveform: a dense carrier oscillation whose amplitude is
+  // modulated by drifting pseudo-noise, so peaks burst and decay irregularly
+  // like a real recording instead of a uniform sine.
+  const layers = [
+    { cycles: 46, speed: 0.9,  color: "139,92,246", alpha: 0.50, width: 1.7, amp: 0.34, seed: 1.0, glow: 10 }, // hyper purple
+    { cycles: 64, speed: 1.3,  color: "56,189,248", alpha: 0.40, width: 1.3, amp: 0.26, seed: 7.3, glow: 8 },  // light blue
+    { cycles: 34, speed: 0.6,  color: "13,148,136", alpha: 0.38, width: 1.6, amp: 0.30, seed: 13.7, glow: 0 }, // teal
+    { cycles: 88, speed: 1.7,  color: "16,24,40",   alpha: 0.13, width: 1.0, amp: 0.18, seed: 23.1, glow: 0 }, // ink detail
+    { cycles: 24, speed: 0.45, color: "139,92,246", alpha: 0.12, width: 2.6, amp: 0.42, seed: 31.9, glow: 0 }, // purple halo
   ];
+
+  // smooth drifting noise in [-1, 1] built from incommensurate sines
+  const noise = (p, time, seed) =>
+    Math.sin(p * 5.3 + time * 0.50 + seed) * 0.5 +
+    Math.sin(p * 11.7 - time * 0.31 + seed * 2.1) * 0.3 +
+    Math.sin(p * 23.1 + time * 0.73 + seed * 3.7) * 0.2;
 
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function frame() {
     ctx.clearRect(0, 0, w, h);
-    const mid = h * 0.58;
-    waves.forEach((wv) => {
+    const mid = h * 0.56;
+    layers.forEach((ly) => {
       ctx.beginPath();
-      const step = Math.max(3 * dpr, w / 320);
+      const step = Math.max(2 * dpr, w / 560);
       for (let x = 0; x <= w; x += step) {
         const p = x / w;
-        const loudness = 0.25 + 0.75 * p * p;            // grows to the right
-        const envelope = Math.sin(Math.PI * Math.min(1, p * 1.06)); // taper edges
-        const y =
-          mid +
-          Math.sin(p * Math.PI * 2 * wv.freq + t * wv.speed + wv.phase) *
-            wv.amp * h * envelope * loudness;
+        // bursty envelope: noise mapped to 0..1 then sharpened, edges tapered
+        let env = noise(p * 2.2, t, ly.seed) * 0.5 + 0.5;
+        env = Math.pow(env, 1.7);
+        const taper = Math.sin(Math.PI * Math.min(1, Math.max(0, p * 1.04)));
+        const carrier = Math.sin(p * Math.PI * 2 * ly.cycles + t * ly.speed * 2.2 + ly.seed);
+        const y = mid + carrier * env * taper * ly.amp * h;
         x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       }
-      ctx.strokeStyle = `rgba(${wv.color},${wv.alpha})`;
-      ctx.lineWidth = wv.width * dpr;
+      ctx.strokeStyle = `rgba(${ly.color},${ly.alpha})`;
+      ctx.lineWidth = ly.width * dpr;
+      ctx.shadowColor = ly.glow ? `rgba(${ly.color},0.55)` : "transparent";
+      ctx.shadowBlur = ly.glow * dpr;
       ctx.stroke();
     });
+    ctx.shadowBlur = 0;
     t += 0.016;
     if (!reduced) requestAnimationFrame(frame);
   }
