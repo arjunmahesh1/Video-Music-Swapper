@@ -75,8 +75,11 @@ class SpotifyManager:
                 open_browser=False,
                 show_dialog=True  # Force login page to appear (allow account switching)
             )
-            # Exchange code for token
-            token_info = auth_manager.get_access_token(code, as_dict=True)
+            # Exchange code for token. check_cache=False is critical: with the
+            # default, spotipy returns the previously cached account's token
+            # and silently discards the new authorization code, making account
+            # switching impossible.
+            token_info = auth_manager.get_access_token(code, as_dict=True, check_cache=False)
             return token_info is not None
         except Exception as e:
             print(f"Failed to handle redirect code: {e}")
