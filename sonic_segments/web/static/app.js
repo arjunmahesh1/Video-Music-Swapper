@@ -7,6 +7,7 @@ const state = {
   sources: new Set(),
   meta: null,
   file: null,
+  spotify: { connected: false, user: null },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -20,12 +21,16 @@ const MODE_SOURCES = {
 const MODE_DEFAULTS = { demo: ["spotify"], variants: ["library", "musicgen"] };
 
 async function init() {
-  const meta = await (await fetch("/api/meta")).json();
+  startWaves();
+  const [meta, spotify] = await Promise.all([
+    fetch("/api/meta").then((r) => r.json()),
+    fetch("/api/spotify/status").then((r) => r.json()).catch(() => ({ connected: false })),
+  ]);
   state.meta = meta;
+  state.spotify = spotify;
   renderMoods(meta.moods);
   renderDemographics(meta.segments);
   setMode("variants");
-  checkSpotify();
 }
 
 function renderMoods(moods) {
@@ -69,14 +74,32 @@ function renderSources() {
   list.innerHTML = "";
   const order = MODE_SOURCES[state.mode];
   const infos = Object.fromEntries(state.meta.sources.map((s) => [s.id, s]));
+
   order.forEach((id) => {
     const s = infos[id];
     if (!s) return;
+    const isSpotify = id === "spotify";
+    const spotifyReady = state.spotify.connected;
+    const usable = isSpotify ? spotifyReady : s.available;
+
     const item = document.createElement("div");
-    item.className = "src-item" + (s.available ? "" : " disabled");
-    const badge = s.demo_only ? '<span class="badge demo">DEMO ONLY</span>' : '<span class="badge legal">CLEARED</span>';
-    item.innerHTML = `<input class="src-check" type="checkbox" ${s.available ? "" : "disabled"}>
-      <div><b>${s.label}</b> ${badge}<p>${s.description} ${s.available ? "" : "— " + s.reason}</p></div>`;
+    item.className = "src-item" + (usable ? "" : " disabled");
+    const badge = s.demo_only
+      ? '<span class="badge demo">DEMO ONLY</span>'
+      : '<span class="badge legal">CLEARED</span>';
+
+    let extra = "";
+    if (isSpotify) {
+      extra = spotifyReady
+        ? `<span class="spotify-connected">✓ Connected as ${state.spotify.user}</span>
+           <a href="/spotify/login" style="font-size:12px;margin-left:8px">switch account</a>`
+        : `<a class="spotify-connect" href="/spotify/login">Connect Spotify</a>`;
+    }
+    const reason = !usable && !isSpotify ? " — " + s.reason : "";
+
+    item.innerHTML = `<input class="src-check" type="checkbox" ${usable ? "" : "disabled"}>
+      <div><b>${s.label}</b> ${badge}<p>${s.description}${reason}</p>${extra}</div>`;
+
     const cb = item.querySelector("input");
     const sync = () => {
       item.classList.toggle("active", cb.checked);
@@ -84,9 +107,10 @@ function renderSources() {
       $("refQueryWrap").style.display = state.sources.has("reference") ? "block" : "none";
       $("ownTrackWrap").style.display = state.sources.has("uploaded") ? "block" : "none";
     };
-    cb.checked = s.available && state.sources.has(id);
+    cb.checked = usable && state.sources.has(id);
     item.onclick = (e) => {
-      if (!s.available) return;
+      if (e.target.closest("a")) return; // let auth/switch links navigate
+      if (!usable) return;
       if (e.target !== cb) cb.checked = !cb.checked;
       sync();
     };
@@ -102,7 +126,10 @@ function setMode(mode) {
   $("demoCard").style.display = mode === "variants" ? "block" : "none";
   $("srcStep").textContent = mode === "variants" ? "5" : "4";
   state.sources = new Set(
-    MODE_DEFAULTS[mode].filter((id) => state.meta.sources.find((s) => s.id === id && s.available))
+    MODE_DEFAULTS[mode].filter((id) => {
+      if (id === "spotify") return state.spotify.connected;
+      return state.meta.sources.find((s) => s.id === id && s.available);
+    })
   );
   renderSources();
 }
@@ -124,21 +151,6 @@ function setFile(file) {
   $("dropLabel").innerHTML = file
     ? `<b>${file.name}</b><br><span style="font-size:13px">${(file.size / 1e6).toFixed(1)} MB — click to change</span>`
     : `<b>Drop your ad file here</b> or click to browse<br><span style="font-size:13px">MP4 preferred — full quality scores best</span>`;
-}
-
-/* spotify chip */
-async function checkSpotify() {
-  const chip = $("spotifyChip");
-  try {
-    const st = await (await fetch("/api/spotify/status")).json();
-    if (st.connected) {
-      chip.textContent = `Spotify: ${st.user}`;
-      chip.classList.add("connected");
-      chip.removeAttribute("href");
-    } else {
-      chip.textContent = "Connect Spotify";
-    }
-  } catch { chip.textContent = "Connect Spotify"; }
 }
 
 /* submit */
@@ -178,5 +190,59 @@ $("intakeForm").onsubmit = async (e) => {
     btn.textContent = "Re-score my ad →";
   }
 };
+
+/* ---- animated soundwave hero ---- */
+function startWaves() {
+  const canvas = $("waveCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let w = 0, h = 0, t = 0;
+
+  const resize = () => {
+    w = canvas.offsetWidth * dpr;
+    h = canvas.offsetHeight * dpr;
+    canvas.width = w;
+    canvas.height = h;
+  };
+  window.addEventListener("resize", resize);
+  resize();
+
+  // layered waves: coral, teal, ink — quiet on the left (under the copy), louder right
+  const waves = [
+    { amp: 0.10, freq: 2.2, speed: 0.55, phase: 0.0, color: "255,90,54",  alpha: 0.30, width: 1.8 },
+    { amp: 0.16, freq: 1.4, speed: 0.34, phase: 2.1, color: "13,148,136", alpha: 0.22, width: 1.6 },
+    { amp: 0.07, freq: 3.1, speed: 0.85, phase: 4.0, color: "16,24,40",   alpha: 0.10, width: 1.2 },
+    { amp: 0.22, freq: 0.9, speed: 0.22, phase: 1.0, color: "255,90,54",  alpha: 0.10, width: 2.4 },
+    { amp: 0.13, freq: 1.8, speed: 0.45, phase: 5.2, color: "13,148,136", alpha: 0.10, width: 1.2 },
+  ];
+
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function frame() {
+    ctx.clearRect(0, 0, w, h);
+    const mid = h * 0.58;
+    waves.forEach((wv) => {
+      ctx.beginPath();
+      const step = Math.max(3 * dpr, w / 320);
+      for (let x = 0; x <= w; x += step) {
+        const p = x / w;
+        const loudness = 0.25 + 0.75 * p * p;            // grows to the right
+        const envelope = Math.sin(Math.PI * Math.min(1, p * 1.06)); // taper edges
+        const y =
+          mid +
+          Math.sin(p * Math.PI * 2 * wv.freq + t * wv.speed + wv.phase) *
+            wv.amp * h * envelope * loudness;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = `rgba(${wv.color},${wv.alpha})`;
+      ctx.lineWidth = wv.width * dpr;
+      ctx.stroke();
+    });
+    t += 0.016;
+    if (!reduced) requestAnimationFrame(frame);
+  }
+  frame();
+}
 
 init();
