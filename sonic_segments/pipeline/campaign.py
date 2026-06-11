@@ -81,7 +81,19 @@ def run_campaign(job: Job) -> dict[str, Any]:
     # Benchmarked on 13 labeled ads: full-mix mood detection beats the
     # separated music stem (54% vs 38% top-1) — stems lose sung vocals
     # and add artifacts, and our CLAP variant handles speech fine.
-    ad_mood = detect_mood(_full_mix(video_path, job.dir / "stems"))
+    full_mix = _full_mix(video_path, job.dir / "stems")
+    ad_mood = detect_mood(full_mix)
+
+    if not params.get("transcript"):
+        job.log("No script provided — auto-transcribing the narration (Whisper)...")
+        from .transcribe import auto_transcript
+
+        derived = auto_transcript(full_mix)
+        if derived:
+            params["transcript"] = derived
+            job.log(f"Auto-transcript captured {len(derived.splitlines())} narration line(s).")
+        else:
+            job.log("No clear narration transcript found; using acoustic speech detection.")
     speech = _speech_summary(stems, duration)
     job.log(
         f"Current bed reads {ad_mood.primary}/{ad_mood.secondary} at {ad_mood.tempo:.0f} BPM, "

@@ -6,7 +6,8 @@
       "12-34s stream more Hip-Hop/R&B than Country; 35-54s invert that (Coleman Insights). Electronica/Dance peaks at 25-39 and is weakest 60+.",
       "Boomers index on nostalgia and long-standing favorites over discovery (NuVoodoo 2025); melody and clarity beat bass-heavy production.",
       "Regional strongholds: K-pop ~half of South Korean streams; Latin is 8.2% of global streams and dominant in LATAM; Nigeria is 62.2% local repertoire (Afrobeats); India is the largest ad-supported market with Bollywood/Punjabi pop leading (Luminate/IFPI 2025).",
-      "Ad-music research: musical campaigns are ~27% better on recall and business effects; music-message congruence is the dominant effectiveness factor; slower tempos suit luxury/finance/wellness, faster suit action/sports CTAs (Advids, UCPress Music Perception)."
+      "Ad-music research: musical campaigns are ~27% better on recall and business effects; music-message congruence is the dominant effectiveness factor; slower tempos suit luxury/finance/wellness, faster suit action/sports CTAs (Advids, UCPress Music Perception).",
+      "Taste-cluster segments are modeled on co-listening structure: streaming platforms derive genres and audience groups from clusters of artists that the same listeners stream in succession / co-place in playlists (Spotify related-artists methodology, agglomerative listener clustering research). Each cluster below is anchored on artists with strong co-listening overlap."
     ],
     "sources": [
       "https://www.bpi.co.uk/news-analysis/seeking-community-report-on-gen-z-music-insights",
@@ -291,6 +292,244 @@
         "happy": {"genres": ["arabic pop", "khaleeji pop"], "search_terms": ["upbeat arabic pop festive"], "prompt": "festive Arabic pop with darbuka percussion and a bright melismatic hook"},
         "hype": {"genres": ["arabic trap"], "search_terms": ["arabic trap oud 808"], "prompt": "Arabic trap with oud riffs over heavy 808s"},
         "romantic": {"genres": ["arabic pop ballad"], "search_terms": ["romantic arabic strings ballad"], "prompt": "romantic Arabic ballad with lush strings and expressive vocal melody"}
+      }
+    },
+    {
+      "id": "indie_alt",
+      "label": "Indie & Alt Tribe",
+      "region": "Taste cluster · global",
+      "description": "Co-listening cluster around Arctic Monkeys / The Strokes / Tame Impala / Mac DeMarco; values guitar texture and irony, allergic to overproduced pop.",
+      "platforms": ["Spotify", "Instagram", "YouTube"],
+      "core_genres": ["indie rock", "garage rock", "psych pop", "art pop", "post-punk revival"],
+      "tempo_range": [95, 145],
+      "energy_range": [0.4, 0.8],
+      "style_keywords": ["jangly guitars", "tape warmth", "groovy basslines", "detached vocals"],
+      "example_artists": ["Arctic Monkeys", "The Strokes", "Tame Impala", "Mac DeMarco", "Fontaines D.C."],
+      "mood_overrides": {
+        "happy": {"genres": ["indie pop", "psych pop"], "search_terms": ["sunny psych pop groove", "feel good indie rock"], "prompt": "sunny psychedelic indie pop with a groovy bassline and jangly guitars"},
+        "hype": {"genres": ["garage rock", "post-punk"], "search_terms": ["driving garage rock riff"], "prompt": "driving garage rock with fuzzy riffs and relentless drums"},
+        "calm": {"genres": ["slacker rock", "dream pop"], "search_terms": ["mellow slacker indie warm tape"], "prompt": "mellow slacker indie with warm tape saturation and lazy guitar"}
+      }
+    },
+    {
+      "id": "pop_stans",
+      "label": "Main-Pop Superfans",
+      "region": "Taste cluster · global",
+      "description": "Stan-culture cluster around Taylor Swift / Olivia Rodrigo / Sabrina Carpenter / Ariana Grande; highest playlist-share and lyric-quoting engagement of any tribe.",
+      "platforms": ["TikTok", "Instagram", "X"],
+      "core_genres": ["pop", "synth pop", "pop rock", "dance pop"],
+      "tempo_range": [95, 140],
+      "energy_range": [0.5, 0.85],
+      "style_keywords": ["huge choruses", "polished vocal stacks", "bridge moments", "confetti drops"],
+      "example_artists": ["Taylor Swift", "Olivia Rodrigo", "Sabrina Carpenter", "Ariana Grande", "Dua Lipa"],
+      "mood_overrides": {
+        "happy": {"genres": ["dance pop", "synth pop"], "search_terms": ["bright glossy pop anthem"], "prompt": "glossy feel-good pop anthem with a huge singalong chorus"},
+        "emotional": {"genres": ["pop ballad"], "search_terms": ["emotional pop ballad bridge piano"], "prompt": "emotional pop ballad that builds from piano to a soaring bridge"},
+        "playful": {"genres": ["bubblegum pop"], "search_terms": ["flirty playful pop bouncy"], "prompt": "flirty playful pop with bouncy synth bass and winking energy"}
+      }
+    },
+    {
+      "id": "sad_indie_folk",
+      "label": "Folk & Sad-Indie",
+      "region": "Taste cluster · US/EU",
+      "description": "Cluster around Noah Kahan / Hozier / Bon Iver / Phoebe Bridgers; emotional sincerity converts, stomp-folk and falsetto catharsis.",
+      "platforms": ["Spotify", "TikTok", "Instagram"],
+      "core_genres": ["indie folk", "stomp folk", "folk rock", "sad indie", "chamber pop"],
+      "tempo_range": [70, 125],
+      "energy_range": [0.25, 0.65],
+      "style_keywords": ["acoustic strums", "group stomps", "falsetto harmonies", "cathartic builds"],
+      "example_artists": ["Noah Kahan", "Hozier", "Bon Iver", "Phoebe Bridgers", "The Lumineers"],
+      "mood_overrides": {
+        "emotional": {"genres": ["sad indie", "indie folk"], "search_terms": ["heartbreaking indie folk slow"], "prompt": "heartbreaking indie folk with fragile vocals and swelling strings"},
+        "uplifting": {"genres": ["stomp folk"], "search_terms": ["stomp folk anthem build claps"], "prompt": "stomp-and-holler folk anthem building to a cathartic group chorus"},
+        "calm": {"genres": ["chamber folk"], "search_terms": ["quiet fingerpicked folk intimate"], "prompt": "quiet fingerpicked folk, intimate and candlelit"}
+      }
+    },
+    {
+      "id": "pop_punk_emo",
+      "label": "Pop-Punk / Emo Revival",
+      "region": "Taste cluster · US/EU",
+      "description": "Twin-peaked cluster: millennials raised on blink-182 / Paramore / MCR plus the Gen-Z revival (MGK, jxdn). Nostalgia plus angst.",
+      "platforms": ["TikTok", "YouTube", "Discord"],
+      "core_genres": ["pop punk", "emo", "alt rock", "easycore"],
+      "tempo_range": [140, 190],
+      "energy_range": [0.65, 0.95],
+      "style_keywords": ["palm-muted guitars", "gang vocals", "double-time drums", "angsty hooks"],
+      "example_artists": ["Paramore", "My Chemical Romance", "blink-182", "Machine Gun Kelly", "Pierce The Veil"],
+      "mood_overrides": {
+        "hype": {"genres": ["pop punk"], "search_terms": ["fast pop punk energetic gang vocals"], "prompt": "fast pop punk with palm-muted verses exploding into a gang-vocal chorus"},
+        "emotional": {"genres": ["emo", "acoustic punk"], "search_terms": ["emo acoustic heartfelt"], "prompt": "heartfelt emo ballad with clean guitars and aching melody"},
+        "playful": {"genres": ["easycore"], "search_terms": ["bouncy pop punk fun"], "prompt": "bouncy playful pop punk with singalong woahs"}
+      }
+    },
+    {
+      "id": "metal_hardrock",
+      "label": "Metal & Hard Rock",
+      "region": "Taste cluster · global",
+      "description": "Highly loyal cluster from Metallica classics to Sleep Token / Ghost crossover; intensity and authenticity over polish, strong merch/gear spend.",
+      "platforms": ["YouTube", "Spotify", "Reddit"],
+      "core_genres": ["metal", "hard rock", "metalcore", "nu metal", "doom"],
+      "tempo_range": [90, 180],
+      "energy_range": [0.7, 1.0],
+      "style_keywords": ["downtuned riffs", "double-kick drums", "screamed-to-clean dynamics"],
+      "example_artists": ["Metallica", "Slipknot", "Sleep Token", "Ghost", "Bring Me The Horizon"],
+      "mood_overrides": {
+        "hype": {"genres": ["metalcore", "hard rock"], "search_terms": ["heavy metal riff aggressive"], "prompt": "aggressive metal with downtuned riffs and pounding double-kick"},
+        "dark": {"genres": ["doom", "industrial metal"], "search_terms": ["dark heavy doom industrial"], "prompt": "dark brooding industrial metal with ominous low riffs"},
+        "epic": {"genres": ["symphonic metal"], "search_terms": ["epic symphonic metal orchestral"], "prompt": "epic symphonic metal with orchestral swells over heavy guitars"}
+      }
+    },
+    {
+      "id": "festival_edm",
+      "label": "Festival EDM",
+      "region": "Taste cluster · global",
+      "description": "Main-stage cluster around Calvin Harris / Martin Garrix / Fred again.. / Skrillex; chases euphoria, drops, and shared peak moments.",
+      "platforms": ["Instagram", "TikTok", "YouTube"],
+      "core_genres": ["edm", "progressive house", "big room", "dance pop", "uk garage"],
+      "tempo_range": [120, 150],
+      "energy_range": [0.65, 1.0],
+      "style_keywords": ["risers", "supersaw drops", "festival chants", "sidechain pump"],
+      "example_artists": ["Calvin Harris", "Martin Garrix", "Fred again..", "Skrillex", "David Guetta"],
+      "mood_overrides": {
+        "hype": {"genres": ["big room", "bass house"], "search_terms": ["festival edm drop anthem"], "prompt": "festival main-stage EDM with a massive supersaw drop"},
+        "happy": {"genres": ["dance pop", "uk garage"], "search_terms": ["feel good dance summer garage"], "prompt": "feel-good summer dance track with a skippy garage groove"},
+        "uplifting": {"genres": ["progressive house"], "search_terms": ["euphoric progressive house build"], "prompt": "euphoric progressive house that builds to a hands-in-the-air release"}
+      }
+    },
+    {
+      "id": "underground_club",
+      "label": "Techno / Underground Club",
+      "region": "Taste cluster · EU/global urban",
+      "description": "After-hours cluster around Charlotte de Witte / Peggy Gou / Fisher; minimal, hypnotic, too-cool-for-main-stage. Strong fashion crossover.",
+      "platforms": ["Instagram", "SoundCloud", "Resident Advisor"],
+      "core_genres": ["techno", "tech house", "minimal", "deep house", "acid"],
+      "tempo_range": [120, 140],
+      "energy_range": [0.55, 0.9],
+      "style_keywords": ["hypnotic loops", "analog drum machines", "dark warehouse texture"],
+      "example_artists": ["Charlotte de Witte", "Peggy Gou", "Fisher", "Amelie Lens", "Boris Brejcha"],
+      "mood_overrides": {
+        "hype": {"genres": ["techno"], "search_terms": ["driving peak time techno"], "prompt": "driving peak-time techno with relentless kick and acid line"},
+        "dark": {"genres": ["dark techno", "minimal"], "search_terms": ["dark warehouse techno hypnotic"], "prompt": "dark hypnotic warehouse techno with cavernous reverb"},
+        "luxurious": {"genres": ["deep house"], "search_terms": ["deep house sleek fashion"], "prompt": "sleek deep house with warm sub bass, fashion-show cool"}
+      }
+    },
+    {
+      "id": "rnb_neosoul",
+      "label": "R&B / Neo-Soul",
+      "region": "Taste cluster · global",
+      "description": "Cluster around SZA / Frank Ocean / Daniel Caesar / Summer Walker; intimacy, vocal runs and late-night atmosphere. Heavy repeat-listening behavior.",
+      "platforms": ["TikTok", "Instagram", "Spotify"],
+      "core_genres": ["r&b", "neo-soul", "alt r&b", "bedroom soul"],
+      "tempo_range": [65, 105],
+      "energy_range": [0.3, 0.65],
+      "style_keywords": ["lush seventh chords", "vocal runs", "tape-warm keys", "pocket drums"],
+      "example_artists": ["SZA", "Frank Ocean", "Daniel Caesar", "Summer Walker", "Brent Faiyaz"],
+      "mood_overrides": {
+        "romantic": {"genres": ["neo-soul", "r&b"], "search_terms": ["smooth neo soul romantic keys"], "prompt": "smooth neo-soul with lush keys and intimate late-night vocals"},
+        "calm": {"genres": ["bedroom soul"], "search_terms": ["mellow rnb chill night"], "prompt": "mellow bedroom R&B, hazy and unhurried"},
+        "luxurious": {"genres": ["alt r&b"], "search_terms": ["silky alt rnb luxurious"], "prompt": "silky alt-R&B with expensive-sounding chords and space"}
+      }
+    },
+    {
+      "id": "conscious_hiphop",
+      "label": "Alt / Conscious Hip-Hop",
+      "region": "Taste cluster · global",
+      "description": "Lyrics-first cluster around Kendrick Lamar / J. Cole / Tyler, The Creator; values craft, jazz textures and message over club bounce.",
+      "platforms": ["YouTube", "X", "Spotify"],
+      "core_genres": ["conscious hip hop", "jazz rap", "alt hip hop", "boom bap"],
+      "tempo_range": [80, 110],
+      "energy_range": [0.4, 0.75],
+      "style_keywords": ["jazz samples", "live drums", "warm vinyl texture", "soul chops"],
+      "example_artists": ["Kendrick Lamar", "J. Cole", "Tyler, The Creator", "Smino", "JID"],
+      "mood_overrides": {
+        "uplifting": {"genres": ["jazz rap"], "search_terms": ["uplifting jazz rap soulful horns"], "prompt": "uplifting jazz-rap instrumental with soulful horns and head-nod drums"},
+        "calm": {"genres": ["boom bap", "jazz hop"], "search_terms": ["smooth boom bap jazz beat"], "prompt": "smooth boom-bap beat over dusty jazz piano"},
+        "emotional": {"genres": ["alt hip hop"], "search_terms": ["emotional soulful hip hop strings"], "prompt": "emotional hip-hop instrumental with soul chops and strings"}
+      }
+    },
+    {
+      "id": "lofi_study",
+      "label": "Lo-fi & Study-Jazz",
+      "region": "Taste cluster · global",
+      "description": "Background-listening cluster (Lofi Girl ecosystem, Laufey, Norah Jones adjacents); students and focus workers, hours-long session lengths.",
+      "platforms": ["YouTube", "Spotify", "Twitch"],
+      "core_genres": ["lo-fi hip hop", "jazz pop", "chillhop", "soft jazz"],
+      "tempo_range": [60, 95],
+      "energy_range": [0.1, 0.4],
+      "style_keywords": ["vinyl crackle", "soft keys", "brushed drums", "rainy-day warmth"],
+      "example_artists": ["Lofi Girl roster", "Laufey", "Norah Jones", "Men I Trust"],
+      "mood_overrides": {
+        "calm": {"genres": ["lo-fi hip hop"], "search_terms": ["lofi chill study beat soft"], "prompt": "soft lo-fi beat with vinyl crackle and warm mellow keys"},
+        "happy": {"genres": ["jazz pop"], "search_terms": ["sunny jazz pop light swing"], "prompt": "light sunny jazz-pop with a gentle swing and playful piano"},
+        "romantic": {"genres": ["soft jazz"], "search_terms": ["romantic soft jazz evening"], "prompt": "romantic soft jazz with brushed drums and tender chords"}
+      }
+    },
+    {
+      "id": "film_score_heads",
+      "label": "Film-Score & Modern Classical",
+      "region": "Taste cluster · global",
+      "description": "Cluster around Hans Zimmer / Max Richter / Ludovico Einaudi; cinematic emotion without lyrics. Overlaps premium and 'thinking brand' audiences.",
+      "platforms": ["YouTube", "Spotify", "CTV"],
+      "core_genres": ["film score", "modern classical", "neo-classical", "orchestral", "ambient classical"],
+      "tempo_range": [55, 120],
+      "energy_range": [0.15, 0.8],
+      "style_keywords": ["string ostinatos", "felt piano", "slow builds", "cinematic space"],
+      "example_artists": ["Hans Zimmer", "Max Richter", "Ludovico Einaudi", "Jóhann Jóhannsson"],
+      "mood_overrides": {
+        "epic": {"genres": ["film score", "orchestral"], "search_terms": ["epic cinematic score build"], "prompt": "epic cinematic score with string ostinatos building to full orchestra"},
+        "emotional": {"genres": ["modern classical"], "search_terms": ["emotional felt piano strings"], "prompt": "emotional modern classical with felt piano and aching strings"},
+        "calm": {"genres": ["ambient classical"], "search_terms": ["calm ambient classical slow"], "prompt": "serene ambient classical, weightless and spacious"}
+      }
+    },
+    {
+      "id": "island_dancehall",
+      "label": "Reggae / Dancehall & Island",
+      "region": "Taste cluster · Caribbean + diaspora",
+      "description": "Cluster spanning Bob Marley classics to Sean Paul / Popcaan / soca; carnival energy and sunshine associations travel globally.",
+      "platforms": ["TikTok", "YouTube", "Instagram"],
+      "core_genres": ["reggae", "dancehall", "soca", "reggaeton crossover"],
+      "tempo_range": [85, 115],
+      "energy_range": [0.45, 0.85],
+      "style_keywords": ["skank guitar", "riddim bounce", "horns", "island warmth"],
+      "example_artists": ["Bob Marley", "Sean Paul", "Popcaan", "Koffee", "Machel Montano"],
+      "mood_overrides": {
+        "happy": {"genres": ["reggae", "soca"], "search_terms": ["sunny reggae feel good island"], "prompt": "sunny feel-good reggae with skank guitar and warm horns"},
+        "hype": {"genres": ["dancehall", "soca"], "search_terms": ["dancehall energy riddim party"], "prompt": "high-energy dancehall riddim built for a carnival crowd"},
+        "calm": {"genres": ["roots reggae"], "search_terms": ["roots reggae mellow dub"], "prompt": "mellow roots reggae with dubby bass and easy sway"}
+      }
+    },
+    {
+      "id": "gospel_ccm",
+      "label": "Gospel & Christian Contemporary",
+      "region": "Taste cluster · US/Africa/LATAM",
+      "description": "Cluster around Maverick City / Lauren Daigle / Kirk Franklin; one of the most engaged and trusting US ad audiences, values warmth and hope.",
+      "platforms": ["Facebook", "YouTube", "Instagram"],
+      "core_genres": ["gospel", "worship", "ccm", "soul"],
+      "tempo_range": [65, 120],
+      "energy_range": [0.3, 0.8],
+      "style_keywords": ["choir swells", "hammond organ", "hand claps", "testimony builds"],
+      "example_artists": ["Maverick City Music", "Lauren Daigle", "Kirk Franklin", "Elevation Worship"],
+      "mood_overrides": {
+        "uplifting": {"genres": ["gospel", "worship"], "search_terms": ["uplifting gospel choir build"], "prompt": "uplifting gospel with a choir swell and joyful claps"},
+        "emotional": {"genres": ["worship ballad"], "search_terms": ["emotional worship piano strings"], "prompt": "emotional worship ballad with piano and gentle strings"},
+        "happy": {"genres": ["gospel soul"], "search_terms": ["joyful gospel soul organ"], "prompt": "joyful gospel-soul with hammond organ and celebratory energy"}
+      }
+    },
+    {
+      "id": "y2k_nostalgia",
+      "label": "Y2K / 2000s Nostalgia",
+      "region": "Taste cluster · millennials + Gen-Z revival",
+      "description": "Throwback cluster (Usher / Beyoncé / Nelly / early-2000s pop-R&B) revived by TikTok; instant emotional shortcut for 25-40s buyers.",
+      "platforms": ["TikTok", "Instagram", "Spotify"],
+      "core_genres": ["2000s r&b", "y2k pop", "crunk", "throwback hip hop"],
+      "tempo_range": [90, 130],
+      "energy_range": [0.5, 0.85],
+      "style_keywords": ["bling-era synths", "snap beats", "autotune accents", "club-circa-2004 sheen"],
+      "example_artists": ["Usher", "Beyoncé", "Nelly", "Missy Elliott", "Sean Paul"],
+      "mood_overrides": {
+        "happy": {"genres": ["y2k pop", "2000s r&b"], "search_terms": ["2000s rnb throwback upbeat"], "prompt": "upbeat 2000s R&B-pop with bling-era synths and a snap groove"},
+        "hype": {"genres": ["crunk", "throwback hip hop"], "search_terms": ["2000s crunk club banger"], "prompt": "2000s crunk-style club banger with shouted hooks"},
+        "romantic": {"genres": ["2000s slow jam"], "search_terms": ["2000s slow jam rnb smooth"], "prompt": "smooth 2000s slow jam with silky harmonies"}
       }
     }
   ]
