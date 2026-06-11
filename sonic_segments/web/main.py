@@ -171,15 +171,16 @@ def spotify_login():
 
 
 @app.get("/callback")
-def spotify_callback(code: str = ""):
+def spotify_callback(code: str = "", error: str = ""):
     from spotify_helper import SpotifyManager
 
-    if code:
-        try:
-            SpotifyManager().handle_redirect_code(code)
-        except Exception as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-    return RedirectResponse("/")
+    if error or not code:
+        return RedirectResponse(f"/?spotify=denied#intake")
+    try:
+        ok = SpotifyManager().handle_redirect_code(code)
+    except Exception:
+        ok = False
+    return RedirectResponse(f"/?spotify={'connected' if ok else 'failed'}#intake")
 
 
 # ---------- helpers ---------------------------------------------------------

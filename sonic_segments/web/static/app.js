@@ -30,7 +30,22 @@ async function init() {
   state.spotify = spotify;
   renderMoods(meta.moods);
   renderDemographics(meta.segments);
-  setMode("variants");
+
+  const flag = new URLSearchParams(location.search).get("spotify");
+  if (flag) {
+    setMode("demo"); // they came back from Spotify auth: land them in the demo flow
+    if (flag !== "connected") {
+      $("err").textContent =
+        flag === "denied"
+          ? "Spotify authorization was cancelled."
+          : "Spotify connection failed — try again, and check the redirect URI in your Spotify dashboard.";
+    } else if (state.spotify.connected) {
+      $("err").textContent = "";
+    }
+    history.replaceState(null, "", "/#intake");
+  } else {
+    setMode("variants");
+  }
 }
 
 function renderMoods(moods) {
