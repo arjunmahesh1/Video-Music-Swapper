@@ -1454,6 +1454,65 @@ def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
     return output_path
 
 
+def mix_vocals_with_music_ducking_pro(vocals_path, new_music_path, output_path,
+                                       vocals_volume=1.0, music_volume=0.8,
+                                       gate_threshold=0.0028, process_timeout=600,
+                                       voice_lowpass_hz=11500,
+                                       sidechain_threshold=0.012,
+                                       sidechain_ratio=6.0):
+    """Production master chain: 48 kHz stereo with presence-band ducking.
+
+    Differences vs the legacy mixer:
+    - the whole graph runs at 48 kHz stereo, so the replacement music keeps
+      its full bandwidth and stereo image (legacy collapsed to the 32 kHz
+      mono voice rate)
+    - the music bed is loudness-normalized to -18 LUFS before levelling, so
+      ducking behaves identically for any source track
+    - EQ-ducking: the bed splits into lows / presence (250-5200 Hz) / air,
+      and only the presence band - the range that masks speech - ducks
+      under the voice. Bass and sparkle ride through narration, which reads
+      as a professional mix instead of full-band pumping.
+    """
+    output_path = Path(output_path)
+
+    filter_complex = (
+        # Voice: clean, compress, lift to 48k stereo (center image), split a sidechain key.
+        f"[0:a]aresample=48000,highpass=f=90,lowpass=f={voice_lowpass_hz},"
+        f"agate=threshold={gate_threshold}:ratio=1.22:attack=7:release=440:range=0.70,"
+        f"acompressor=threshold=0.105:ratio=1.75:attack=10:release=190:makeup=2.6,"
+        f"volume={vocals_volume},aformat=channel_layouts=stereo,asplit=2[voice][vkey];"
+        # Music: full-bandwidth stereo, normalized bed, then levelled.
+        f"[1:a]aresample=48000,aformat=channel_layouts=stereo,"
+        f"loudnorm=I=-18:TP=-2.0:LRA=11,aresample=48000,"
+        f"volume={music_volume}[mn];"
+        # Presence-band ducking: only the speech-masking band compresses.
+        f"[mn]acrossover=split=250 5200:order=4th[ml][mm][mh];"
+        f"[mm][vkey]sidechaincompress="
+        f"threshold={sidechain_threshold}:ratio={sidechain_ratio}:"
+        f"attack=18:release=420:makeup=1[mmd];"
+        f"[ml][mmd][mh]amix=inputs=3:normalize=0,alimiter=limit=0.98[md];"
+        # Sum and glue.
+        f"[voice][md]amix=inputs=2:duration=shortest:normalize=0:dropout_transition=0,"
+        f"acompressor=threshold=0.20:ratio=1.9:attack=20:release=220:makeup=1.15,"
+        f"alimiter=limit=0.95"
+    )
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(vocals_path),
+        "-i", str(new_music_path),
+        "-filter_complex", filter_complex,
+        "-ar", "48000",
+        "-ac", "2",
+        str(output_path)
+    ]
+
+    print("Mixing with production chain (48 kHz stereo, presence-band ducking)...")
+    _run_checked(cmd, timeout=process_timeout, step_name="Audio mixing (pro)")
+    print(f"Pro mix saved to: {output_path}")
+    return output_path
+
+
 def _extract_mono_wav_for_analysis(source_path, output_path, sr=32000):
     """Convert any audio source to analysis-friendly mono PCM WAV."""
     cmd = [
@@ -1836,9 +1895,13 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
             f"between(t,{max(0.0, s - pad_pre):.3f},{e + pad_post:.3f})" for s, e in speech_segments
         ]
         enable_expr = "+".join(enable_conds)
+        # Transcript windows are trusted -> hard-mute between them. ASR windows
+        # miss words, so keep a soft floor outside them: missed narration stays
+        # audible (~-10 dB) while residual old-music bleed remains suppressed.
+        outside_floor = 0.0 if using_transcript_segments else 0.30
         speech_mask_filter = (
             f"volume=enable='{enable_expr}':volume=1,"
-            f"volume=enable='not({enable_expr})':volume=0,"
+            f"volume=enable='not({enable_expr})':volume={outside_floor},"
             "highpass=f=95,lowpass=f=9000,"
             "agate=threshold=0.0024:ratio=1.22:attack=7:release=420:range=0.68"
         )
@@ -1976,14 +2039,29 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
 
     # Step 4: Mix clean voiceover with new music + ducking
     print("Step 4: Mixing voiceover with new music (auto-ducking enabled)...")
-    mixed_path = mix_vocals_with_music_ducking(
-        mix_voice_source,
-        music_to_use,
-        output_path,
-        vocals_volume=vocals_volume,
-        music_volume=music_volume,
-        process_timeout=max(600, ffmpeg_timeout)
-    )
+    use_pro_mix = os.getenv("SONIC_PRO_MIX", "1").strip().lower() not in {"0", "false", "no"}
+    mixed_path = None
+    if use_pro_mix:
+        try:
+            mixed_path = mix_vocals_with_music_ducking_pro(
+                mix_voice_source,
+                music_to_use,
+                output_path,
+                vocals_volume=vocals_volume,
+                music_volume=music_volume,
+                process_timeout=max(600, ffmpeg_timeout)
+            )
+        except Exception as e:
+            print(f"Warning: pro mix chain failed ({e}); falling back to legacy mixer.")
+    if mixed_path is None:
+        mixed_path = mix_vocals_with_music_ducking(
+            mix_voice_source,
+            music_to_use,
+            output_path,
+            vocals_volume=vocals_volume,
+            music_volume=music_volume,
+            process_timeout=max(600, ffmpeg_timeout)
+        )
 
     # Step 4.5: Evaluate quality and auto-correct once when quality is poor.
     print("Step 4.5: Evaluating swap quality...")

@@ -24,7 +24,7 @@ async function init() {
   startWaves();
   const [meta, spotify] = await Promise.all([
     fetch("/api/meta").then((r) => r.json()),
-    fetch("/api/spotify/status").then((r) => r.json()).catch(() => ({ connected: false })),
+    fetch("/api/spotify/status", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ connected: false })),
   ]);
   state.meta = meta;
   state.spotify = spotify;
@@ -176,8 +176,10 @@ function spotifyAuth(switchAccount) {
 window.addEventListener("message", async (e) => {
   if (e.origin !== window.location.origin || typeof e.data !== "string" || !e.data.startsWith("spotify:")) return;
   const status = e.data.split(":")[1];
-  state.spotify = await fetch("/api/spotify/status").then((r) => r.json()).catch(() => ({ connected: false }));
-  renderSources();
+  state.spotify = await fetch("/api/spotify/status", { cache: "no-store" })
+    .then((r) => r.json())
+    .catch(() => ({ connected: false }));
+  renderSources(); // re-paints "Connected as <name>" with the fresh account
   $("err").textContent =
     status === "connected" ? "" :
     status === "denied" ? "Spotify authorization was cancelled." :
