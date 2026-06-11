@@ -37,6 +37,18 @@ header.site {
   display: flex; align-items: center; justify-content: space-between;
   padding: 22px 0;
 }
+header.site.fixed {
+  display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 0;
+  background: rgba(255, 255, 255, .78);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(230, 232, 238, .9);
+}
+header.site.fixed .bar {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 60px;
+}
+.hero-band { padding-top: 60px; }
 .wordmark {
   font-weight: 700; letter-spacing: 0.14em; font-size: 15px; color: var(--ink);
   text-decoration: none;
@@ -232,11 +244,31 @@ label.fld { display: block; font-size: 13px; font-weight: 500; color: var(--ink)
 }
 .timeline li:last-child { color: var(--ink); font-weight: 400; }
 .timeline li:last-child::before { background: var(--accent); }
-.progress-track { height: 8px; border-radius: 99px; background: #eef0f4; overflow: hidden; margin-top: 18px; }
-.progress-bar {
-  height: 100%; width: 2%;
-  background: linear-gradient(92deg, var(--accent), var(--teal));
-  border-radius: 99px; transition: width .6s ease;
+/* equalizer progress */
+.eq {
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 52px; margin-top: 22px;
+}
+.eq span {
+  flex: 1; min-width: 3px; border-radius: 3px;
+  background: #e6e8ee; height: 18%;
+  transform-origin: bottom;
+  transition: background .3s;
+}
+.eq span.on {
+  background: linear-gradient(180deg, var(--accent), var(--teal));
+  animation: eq-dance 0.85s ease-in-out infinite alternate;
+}
+@keyframes eq-dance {
+  from { height: 16%; }
+  to   { height: calc(var(--peak, 0.8) * 100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eq span.on { animation: none; height: 70%; }
+}
+.eq-pct {
+  font-size: 12px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin-top: 8px;
 }
 .spinner {
   width: 16px; height: 16px; border: 2.5px solid var(--line); border-top-color: var(--accent);

@@ -7,15 +7,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=3">
 </head>
 <body>
-<div class="wrap">
-  <header class="site">
+<header class="site fixed">
+  <div class="wrap bar">
     <a class="wordmark" href="/">SONIC<em>SEGMENTS</em></a>
-    <button class="btn secondary" onclick="navigator.clipboard.writeText(location.href); this.textContent='Link copied ✓'">Share this preview</button>
-  </header>
-
+    <button class="btn secondary" style="padding:8px 18px;font-size:14px" onclick="navigator.clipboard.writeText(location.href); this.textContent='Link copied ✓'">Share this preview</button>
+  </div>
+</header>
+<div class="wrap" style="padding-top:84px">
   <h1 style="font-size:30px;margin:8px 0 4px">{{ m.brand or "Your ad" }}, re-scored.</h1>
   <p style="color:var(--muted)">Tap a cut to flip the audio instantly. Same voiceover — different music, per audience.</p>
 

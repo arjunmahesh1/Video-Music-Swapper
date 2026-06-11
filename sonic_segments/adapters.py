@@ -63,8 +63,14 @@ def mux_audio_with_video(
     audio_path: str | Path,
     output_path: str | Path,
     timeout: int = 900,
+    polish: bool = True,
 ) -> Path:
-    """Replace a video's soundtrack with the provided audio track."""
+    """Replace a video's soundtrack with the provided audio track.
+
+    With polish=True the audio is finished to ad-delivery standards:
+    -14 LUFS loudness (streaming norm), a short tail fade so the bed never
+    hard-cuts, and 256k AAC instead of ffmpeg's ~128k default.
+    """
     output_path = Path(output_path)
     cmd = [
         "ffmpeg",
@@ -80,10 +86,31 @@ def mux_audio_with_video(
         "-map",
         "1:a:0",
         "-shortest",
-        str(output_path),
     ]
+    if polish:
+        duration = _probe_duration(video_path)
+        afilters = ["loudnorm=I=-14:TP=-1.5:LRA=11"]
+        if duration > 3.0:
+            fade = 0.7
+            afilters.append(f"afade=t=out:st={duration - fade:.2f}:d={fade}")
+        cmd += ["-af", ",".join(afilters), "-c:a", "aac", "-b:a", "256k", "-ar", "48000"]
+    cmd.append(str(output_path))
     run_subprocess_checked(cmd, "Mux video and audio", timeout=timeout)
     return output_path
+
+
+def _probe_duration(media_path: str | Path) -> float:
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(media_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    try:
+        return float((result.stdout or "").strip())
+    except ValueError:
+        return 0.0
 
 
 def calculate_speech_coverage(speech_segments: list[tuple[float, float]]) -> float:

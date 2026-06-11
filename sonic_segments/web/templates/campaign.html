@@ -7,21 +7,23 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=3">
 </head>
 <body>
-<div class="wrap">
-  <header class="site">
+<header class="site fixed">
+  <div class="wrap bar">
     <a class="wordmark" href="/">SONIC<em>SEGMENTS</em></a>
-  </header>
-
+  </div>
+</header>
+<div class="wrap" style="padding-top:60px">
   <div class="card" style="margin-top:48px">
     <h2 id="title"><span class="spinner"></span>Re-scoring your ad</h2>
     <p style="color:var(--muted);font-size:14.5px">
       Separating the voiceover, profiling the sound, sourcing music per audience, and rendering.
       Heavy lifting happens locally — a campaign with several cuts can take a few minutes.
     </p>
-    <div class="progress-track"><div class="progress-bar" id="bar"></div></div>
+    <div class="eq" id="eq" aria-label="progress"></div>
+    <div class="eq-pct" id="eqPct">warming up…</div>
     <ul class="timeline" id="timeline"></ul>
     <div class="err" id="err"></div>
     <div class="dl-row" id="doneRow" style="display:none">
@@ -34,16 +36,31 @@
 const jobId = {{ job_id | tojson }};
 const timeline = document.getElementById("timeline");
 
+/* equalizer progress: bars left of the playhead dance, the rest wait */
+const EQ_BARS = 48;
+const eq = document.getElementById("eq");
+for (let i = 0; i < EQ_BARS; i++) {
+  const bar = document.createElement("span");
+  bar.style.animationDelay = `${(i % 7) * 0.11}s`;
+  bar.style.setProperty("--peak", (0.45 + Math.random() * 0.55).toFixed(2));
+  eq.appendChild(bar);
+}
+function setProgress(pct) {
+  const lit = Math.round((pct / 100) * EQ_BARS);
+  [...eq.children].forEach((bar, i) => bar.classList.toggle("on", i < lit));
+  document.getElementById("eqPct").textContent = pct >= 100 ? "done" : `${pct}%`;
+}
+
 async function poll() {
   try {
     const job = await (await fetch(`/api/campaigns/${jobId}`)).json();
     timeline.innerHTML = job.events.map(e => `<li>${e.msg}</li>`).join("");
     const pct = [...job.events].reverse().find(e => e.pct != null);
-    if (pct) document.getElementById("bar").style.width = Math.max(2, pct.pct) + "%";
+    if (pct) setProgress(Math.max(4, pct.pct));
 
     if (job.status === "done") {
       document.getElementById("title").textContent = "Done — your cuts are ready";
-      document.getElementById("bar").style.width = "100%";
+      setProgress(100);
       const link = document.getElementById("previewLink");
       link.href = `/preview/${jobId}`;
       document.getElementById("doneRow").style.display = "flex";
