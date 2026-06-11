@@ -61,6 +61,7 @@ class SonicSegmentsService:
         output_path: str | Path,
         preserve_voiceover: bool = True,
         transcript_hint_text: str | None = None,
+        speech_segments_override: list | None = None,
         vocals_volume: float = 1.0,
         music_volume: float = 0.7,
         track: TrackCandidate | None = None,
@@ -88,6 +89,7 @@ class SonicSegmentsService:
                     vocals_volume=vocals_volume,
                     music_volume=music_volume,
                     transcript_hint_text=transcript_hint_text,
+                    speech_segments_override=speech_segments_override,
                 )
             else:
                 audio_output_path = music_path

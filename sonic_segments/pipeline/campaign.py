@@ -84,14 +84,19 @@ def run_campaign(job: Job) -> dict[str, Any]:
     full_mix = _full_mix(video_path, job.dir / "stems")
     ad_mood = detect_mood(full_mix)
 
+    speech_windows: list[tuple[float, float]] = []
     if not params.get("transcript"):
-        job.log("No script provided — auto-transcribing the narration (Whisper)...")
-        from .transcribe import auto_transcript
+        job.log("No script provided — auto-transcribing the narration (Whisper, word-level)...")
+        from .transcribe import auto_speech_windows
 
-        derived = auto_transcript(full_mix)
+        derived, speech_windows = auto_speech_windows(full_mix)
         if derived:
             params["transcript"] = derived
-            job.log(f"Auto-transcript captured {len(derived.splitlines())} narration line(s).")
+            covered = sum(e - s for s, e in speech_windows)
+            job.log(
+                f"Auto-transcript captured {len(derived.splitlines())} line(s); "
+                f"{len(speech_windows)} word-level windows covering {covered:.1f}s."
+            )
         else:
             job.log("No clear narration transcript found; using acoustic speech detection.")
     speech = _speech_summary(stems, duration)
@@ -167,6 +172,7 @@ def run_campaign(job: Job) -> dict[str, Any]:
             render = _render(
                 video_path, Path(winner["audio_path"]), job.dir / "variants" / out_name,
                 transcript=params.get("transcript"),
+                speech_windows=speech_windows or None,
             )
         except Exception as exc:
             job.log(f"  ! Render failed for {label}: {exc}")
@@ -265,7 +271,13 @@ def _speech_summary(stems: dict[str, Path], duration: float) -> dict[str, Any]:
     }
 
 
-def _render(video_path: Path, music_path: Path, output_path: Path, transcript: str | None = None):
+def _render(
+    video_path: Path,
+    music_path: Path,
+    output_path: Path,
+    transcript: str | None = None,
+    speech_windows: list | None = None,
+):
     from ..service import SonicSegmentsService
 
     service = SonicSegmentsService()
@@ -275,4 +287,5 @@ def _render(video_path: Path, music_path: Path, output_path: Path, transcript: s
         output_path=output_path,
         preserve_voiceover=True,
         transcript_hint_text=transcript,
+        speech_segments_override=speech_windows,
     )

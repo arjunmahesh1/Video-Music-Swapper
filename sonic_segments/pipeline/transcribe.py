@@ -11,12 +11,20 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def auto_transcript(audio_path: str | Path) -> str | None:
-    """Transcribe narration to `M:SS text` lines; None when nothing usable."""
+WORD_MERGE_GAP_S = 0.8
+
+
+def auto_speech_windows(audio_path: str | Path) -> tuple[str | None, list[tuple[float, float]]]:
+    """Transcribe narration and return (transcript text, exact word-level windows).
+
+    Word timestamps give true starts AND ends, so long narration lines with
+    pauses don't get truncated by end-time estimation. Words separated by
+    less than WORD_MERGE_GAP_S merge into one window.
+    """
     try:
         from faster_whisper import WhisperModel
     except ImportError:
-        return None
+        return None, []
 
     try:
         from voice_separator import is_likely_music_lyrics
@@ -29,18 +37,35 @@ def auto_transcript(audio_path: str | Path) -> str | None:
             str(audio_path),
             vad_filter=True,
             beam_size=5,
+            word_timestamps=True,
             condition_on_previous_text=False,
         )
+
         lines: list[str] = []
+        words: list[tuple[float, float]] = []
         for seg in segments:
             text = (seg.text or "").strip()
-            if len(text) < 3:
-                continue
-            if is_likely_music_lyrics(text):
+            if len(text) < 3 or is_likely_music_lyrics(text):
                 continue
             minutes, seconds = int(seg.start // 60), int(seg.start % 60)
             lines.append(f"{minutes}:{seconds:02d} {text}")
-        return "\n".join(lines) if lines else None
+            for word in seg.words or []:
+                words.append((float(word.start), float(word.end)))
+
+        windows: list[tuple[float, float]] = []
+        for start, end in sorted(words):
+            if windows and start - windows[-1][1] <= WORD_MERGE_GAP_S:
+                windows[-1] = (windows[-1][0], max(windows[-1][1], end))
+            else:
+                windows.append((start, end))
+
+        return ("\n".join(lines) if lines else None), windows
     except Exception as exc:
         print(f"[transcribe] auto transcript failed: {exc}")
-        return None
+        return None, []
+
+
+def auto_transcript(audio_path: str | Path) -> str | None:
+    """Back-compat wrapper returning only the transcript text."""
+    text, _windows = auto_speech_windows(audio_path)
+    return text

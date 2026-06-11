@@ -68,6 +68,7 @@ def separate_and_remix_with_backend(
     vocals_volume: float = 1.0,
     music_volume: float = 0.7,
     transcript_hint_text: str | None = None,
+    speech_segments_override: list | None = None,
 ):
     backend_id = backend_id or get_default_voice_backend_id()
     if backend_id == "stage1_dialogue":
@@ -87,6 +88,7 @@ def separate_and_remix_with_backend(
         vocals_volume=vocals_volume,
         music_volume=music_volume,
         transcript_hint_text=transcript_hint_text,
+        speech_segments_override=speech_segments_override,
     )
 
 

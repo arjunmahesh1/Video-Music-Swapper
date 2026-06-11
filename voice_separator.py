@@ -1481,10 +1481,11 @@ def mix_vocals_with_music_ducking_pro(vocals_path, new_music_path, output_path,
         f"agate=threshold={gate_threshold}:ratio=1.22:attack=7:release=440:range=0.70,"
         f"acompressor=threshold=0.105:ratio=1.75:attack=10:release=190:makeup=2.6,"
         f"volume={vocals_volume},aformat=channel_layouts=stereo,asplit=2[voice][vkey];"
-        # Music: full-bandwidth stereo, normalized bed, then levelled.
+        # Music: full-bandwidth stereo, normalized bed, levelled, with a short
+        # intro swell so the bed never drowns narration that starts at t=0.
         f"[1:a]aresample=48000,aformat=channel_layouts=stereo,"
         f"loudnorm=I=-18:TP=-2.0:LRA=11,aresample=48000,"
-        f"volume={music_volume}[mn];"
+        f"volume={music_volume},afade=t=in:st=0:d=0.9[mn];"
         # Presence-band ducking: only the speech-masking band compresses.
         f"[mn]acrossover=split=250 5200:order=4th[ml][mm][mh];"
         f"[mm][vkey]sidechaincompress="
@@ -1733,7 +1734,8 @@ def detect_song_start(audio_path, window_size=5.0, energy_threshold=1.5):
 
 def separate_and_remix(video_audio_path, new_music_path, output_path,
                        vocals_volume=1.0, music_volume=0.7,
-                       transcript_hint_text=None):
+                       transcript_hint_text=None,
+                       speech_segments_override=None):
     """Full pipeline: replace background music while preserving voiceover.
 
     Creates a clean mix with:
@@ -1831,8 +1833,16 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
     # Step 2: Detect ONLY voiceover segments (not singing)
     print("Step 2: Detecting voiceover segments...")
     using_transcript_segments = False
+    using_override_segments = False
     speech_segments = []
-    if transcript_hint_text:
+    if speech_segments_override:
+        # Exact (start, end) windows from word-level ASR upstream: more
+        # precise than text timestamps, which only carry line starts.
+        speech_segments = [(float(s), float(e)) for s, e in speech_segments_override]
+        using_transcript_segments = True
+        using_override_segments = True
+        print(f"Using word-level speech windows from upstream ASR: {len(speech_segments)}")
+    elif transcript_hint_text:
         parsed_segments = parse_transcript_speech_segments(
             transcript_hint_text,
             duration_seconds=duration_seconds
@@ -1895,10 +1905,15 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
             f"between(t,{max(0.0, s - pad_pre):.3f},{e + pad_post:.3f})" for s, e in speech_segments
         ]
         enable_expr = "+".join(enable_conds)
-        # Transcript windows are trusted -> hard-mute between them. ASR windows
-        # miss words, so keep a soft floor outside them: missed narration stays
-        # audible (~-10 dB) while residual old-music bleed remains suppressed.
-        outside_floor = 0.0 if using_transcript_segments else 0.30
+        # User-pasted transcript windows are trusted -> hard-mute between them.
+        # Auto-ASR word windows are precise but can miss words -> small floor.
+        # Acoustic-only windows are least reliable -> higher floor (~-10 dB).
+        if using_override_segments:
+            outside_floor = 0.18
+        elif using_transcript_segments:
+            outside_floor = 0.0
+        else:
+            outside_floor = 0.30
         speech_mask_filter = (
             f"volume=enable='{enable_expr}':volume=1,"
             f"volume=enable='not({enable_expr})':volume={outside_floor},"
