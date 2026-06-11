@@ -111,7 +111,9 @@ function renderSources() {
            <a href="#" class="spotify-switch" style="font-size:12px;margin-left:8px">switch account</a>`
         : `<a class="spotify-connect" href="#">Connect Spotify</a>`;
     }
-    const reason = !usable && !isSpotify ? " — " + s.reason : "";
+    const reason = !usable
+      ? " — " + (isSpotify ? "connect Spotify below to enable" : s.reason)
+      : "";
 
     item.innerHTML = `<input class="src-check" type="checkbox" ${usable ? "" : "disabled"}>
       <div><b>${s.label}</b> ${badge}<p>${s.description}${reason}</p>${extra}</div>`;

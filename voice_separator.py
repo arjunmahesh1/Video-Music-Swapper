@@ -1842,6 +1842,30 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         using_transcript_segments = True
         using_override_segments = True
         print(f"Using word-level speech windows from upstream ASR: {len(speech_segments)}")
+        # Generalization net: quiet conversational dialogue can slip past
+        # Whisper's VAD. Union in acoustic speech windows from the stem,
+        # but only those that read as speech (not singing).
+        try:
+            acoustic = _derive_speech_segments_acoustic(
+                str(separated['vocals']), accompaniment_path=str(separated['music'])
+            ) or []
+            added = 0
+            import librosa as _librosa
+
+            y_voc, sr_voc = _librosa.load(str(separated['vocals']), sr=16000, mono=True)
+            for a_start, a_end in acoustic:
+                overlaps = any(not (a_end <= s or a_start >= e) for s, e in speech_segments)
+                if overlaps:
+                    continue
+                clip = y_voc[int(a_start * sr_voc):int(a_end * sr_voc)]
+                if clip.size and not is_singing_not_speech(clip, sr=sr_voc):
+                    speech_segments.append((float(a_start), float(a_end)))
+                    added += 1
+            if added:
+                speech_segments = _merge_segments(sorted(speech_segments))
+                print(f"Added {added} acoustic speech window(s) Whisper missed.")
+        except Exception as e:
+            print(f"Warning: acoustic union skipped ({e}).")
     elif transcript_hint_text:
         parsed_segments = parse_transcript_speech_segments(
             transcript_hint_text,
