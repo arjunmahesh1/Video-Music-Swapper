@@ -1454,20 +1454,32 @@ def mix_vocals_with_music_ducking(vocals_path, new_music_path, output_path,
     return output_path
 
 
+def _measure_integrated_lufs(audio_path, timeout=180):
+    """Measure integrated loudness (LUFS) with ffmpeg ebur128."""
+    cmd = ["ffmpeg", "-i", str(audio_path), "-af", "ebur128=framelog=quiet", "-f", "null", "-"]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    text = result.stderr or ""
+    match = re.search(r"Integrated loudness:\s*\n?\s*I:\s*(-?[\d.]+)\s*LUFS", text)
+    if not match:
+        match = re.search(r"I:\s*(-?[\d.]+)\s*LUFS", text)
+    return float(match.group(1)) if match else None
+
+
 def mix_vocals_with_music_ducking_pro(vocals_path, new_music_path, output_path,
                                        vocals_volume=1.0, music_volume=0.8,
                                        gate_threshold=0.0028, process_timeout=600,
                                        voice_lowpass_hz=11500,
                                        sidechain_threshold=0.012,
-                                       sidechain_ratio=6.0):
+                                       sidechain_ratio=4.0):
     """Production master chain: 48 kHz stereo with presence-band ducking.
 
     Differences vs the legacy mixer:
     - the whole graph runs at 48 kHz stereo, so the replacement music keeps
       its full bandwidth and stereo image (legacy collapsed to the 32 kHz
       mono voice rate)
-    - the music bed is loudness-normalized to -18 LUFS before levelling, so
-      ducking behaves identically for any source track
+    - the music bed is loudness-normalized to -18 LUFS via a measured STATIC
+      gain (two-pass), so ducking behaves identically for any source track
+      with none of dynamic loudnorm's underwater warble
     - EQ-ducking: the bed splits into lows / presence (250-5200 Hz) / air,
       and only the presence band - the range that masks speech - ducks
       under the voice. Bass and sparkle ride through narration, which reads
@@ -1475,16 +1487,23 @@ def mix_vocals_with_music_ducking_pro(vocals_path, new_music_path, output_path,
     """
     output_path = Path(output_path)
 
+    # Two-pass static bed normalization: measure once, apply a constant gain.
+    bed_gain_db = 0.0
+    measured = _measure_integrated_lufs(new_music_path, timeout=process_timeout)
+    if measured is not None:
+        bed_gain_db = max(-20.0, min(20.0, -18.0 - measured))
+        print(f"Music bed measured {measured:.1f} LUFS; applying {bed_gain_db:+.1f} dB static gain.")
+
     filter_complex = (
         # Voice: clean, compress, lift to 48k stereo (center image), split a sidechain key.
         f"[0:a]aresample=48000,highpass=f=90,lowpass=f={voice_lowpass_hz},"
         f"agate=threshold={gate_threshold}:ratio=1.22:attack=7:release=440:range=0.70,"
         f"acompressor=threshold=0.105:ratio=1.75:attack=10:release=190:makeup=2.6,"
         f"volume={vocals_volume},aformat=channel_layouts=stereo,asplit=2[voice][vkey];"
-        # Music: full-bandwidth stereo, normalized bed, levelled, with a short
-        # intro swell so the bed never drowns narration that starts at t=0.
+        # Music: full-bandwidth stereo, static-normalized bed, levelled, with a
+        # short intro swell so the bed never drowns narration at t=0.
         f"[1:a]aresample=48000,aformat=channel_layouts=stereo,"
-        f"loudnorm=I=-18:TP=-2.0:LRA=11,aresample=48000,"
+        f"volume={bed_gain_db}dB,"
         f"volume={music_volume},afade=t=in:st=0:d=0.9[mn];"
         # Presence-band ducking: only the speech-masking band compresses.
         f"[mn]acrossover=split=250 5200:order=4th[ml][mm][mh];"

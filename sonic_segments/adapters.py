@@ -89,7 +89,17 @@ def mux_audio_with_video(
     ]
     if polish:
         duration = _probe_duration(video_path)
-        afilters = ["loudnorm=I=-14:TP=-1.5:LRA=11"]
+        # Static (two-pass) loudness to -14 LUFS: dynamic single-pass loudnorm
+        # audibly warbles ("underwater") when far from target, so measure once
+        # and apply a constant gain with a true-peak limiter.
+        from voice_separator import _measure_integrated_lufs
+
+        afilters = []
+        measured = _measure_integrated_lufs(audio_path)
+        if measured is not None:
+            gain_db = max(-18.0, min(18.0, -14.0 - measured))
+            afilters.append(f"volume={gain_db:.2f}dB")
+        afilters.append("alimiter=limit=0.94:attack=4:release=120")
         if duration > 3.0:
             fade = 0.7
             afilters.append(f"afade=t=out:st={duration - fade:.2f}:d={fade}")
