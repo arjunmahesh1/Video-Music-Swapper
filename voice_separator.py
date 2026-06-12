@@ -412,6 +412,21 @@ def separate_audio(audio_path, output_dir=None, model=None):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Preferred backend: UVR cascade (BS-Roformer vocals + karaoke lead
+    # isolation) — benchmarks ahead of Demucs for voice extraction and able
+    # to strip sung backing vocals from the narrator stem. Demucs remains
+    # the fallback ladder.
+    use_uvr = model is None and os.getenv("SONIC_UVR", "1").strip().lower() not in {"0", "false", "no"}
+    if use_uvr:
+        try:
+            import uvr_backend
+
+            if uvr_backend.is_available():
+                lead = os.getenv("SONIC_LEAD_ISOLATION", "1").strip().lower() not in {"0", "false", "no"}
+                return uvr_backend.separate_with_uvr(audio_path, output_dir, lead_isolation=lead)
+        except Exception as e:
+            print(f"UVR backend failed ({e}); falling back to Demucs.")
+
     duration_seconds = _probe_duration_seconds(audio_path)
 
     # Check if CUDA GPU is available
