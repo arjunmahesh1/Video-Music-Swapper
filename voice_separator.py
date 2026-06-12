@@ -1861,30 +1861,31 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         using_transcript_segments = True
         using_override_segments = True
         print(f"Using word-level speech windows from upstream ASR: {len(speech_segments)}")
-        # Generalization net: quiet conversational dialogue can slip past
-        # Whisper's VAD. Union in acoustic speech windows from the stem,
-        # but only those that read as speech (not singing).
+        # Generalization net: quiet lines (whispered taglines, soft dialogue)
+        # can slip past full-mix ASR. Run a second word-level ASR pass on the
+        # SEPARATED VOCALS STEM, where they are exposed without music. Sung
+        # chants from the original bed are rejected textually by the lyrics
+        # filters, which a purely acoustic union cannot do.
         try:
-            acoustic = _derive_speech_segments_acoustic(
-                str(separated['vocals']), accompaniment_path=str(separated['music'])
-            ) or []
-            added = 0
-            import librosa as _librosa
+            from sonic_segments.pipeline.transcribe import auto_speech_windows
 
-            y_voc, sr_voc = _librosa.load(str(separated['vocals']), sr=16000, mono=True)
-            for a_start, a_end in acoustic:
-                overlaps = any(not (a_end <= s or a_start >= e) for s, e in speech_segments)
-                if overlaps:
-                    continue
-                clip = y_voc[int(a_start * sr_voc):int(a_end * sr_voc)]
-                if clip.size and not is_singing_not_speech(clip, sr=sr_voc):
-                    speech_segments.append((float(a_start), float(a_end)))
-                    added += 1
-            if added:
-                speech_segments = _merge_segments(sorted(speech_segments))
-                print(f"Added {added} acoustic speech window(s) Whisper missed.")
+            _stem_text, stem_windows = auto_speech_windows(separated['vocals'])
+            if stem_windows:
+                before = sum(e - s for s, e in speech_segments)
+                merged = _merge_segments(
+                    sorted(speech_segments + [(float(s), float(e)) for s, e in stem_windows])
+                )
+                after = sum(e - s for s, e in merged)
+                if after > before + 0.05:
+                    # Overlapping windows merge and EXTEND (a stem window can
+                    # stretch past a full-mix window, e.g. whispered tag ends).
+                    speech_segments = merged
+                    print(
+                        f"Stem ASR extended narration coverage {before:.1f}s -> {after:.1f}s "
+                        f"({len(speech_segments)} window(s))."
+                    )
         except Exception as e:
-            print(f"Warning: acoustic union skipped ({e}).")
+            print(f"Warning: stem ASR union skipped ({e}).")
     elif transcript_hint_text:
         parsed_segments = parse_transcript_speech_segments(
             transcript_hint_text,
@@ -1949,10 +1950,12 @@ def separate_and_remix(video_audio_path, new_music_path, output_path,
         ]
         enable_expr = "+".join(enable_conds)
         # User-pasted transcript windows are trusted -> hard-mute between them.
-        # Auto-ASR word windows are precise but can miss words -> small floor.
-        # Acoustic-only windows are least reliable -> higher floor (~-10 dB).
+        # Auto windows are now double-ASR-verified (full mix + vocals stem),
+        # so the safety floor can sit near-mute (~-24 dB): enough to keep a
+        # truly missed word faintly present without letting loud sung vocals
+        # from the original bed "burp" through between narration.
         if using_override_segments:
-            outside_floor = 0.18
+            outside_floor = 0.06
         elif using_transcript_segments:
             outside_floor = 0.0
         else:

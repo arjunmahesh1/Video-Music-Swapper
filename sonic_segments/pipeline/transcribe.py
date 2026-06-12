@@ -36,6 +36,9 @@ def auto_speech_windows(audio_path: str | Path) -> tuple[str | None, list[tuple[
         segments, _info = model.transcribe(
             str(audio_path),
             vad_filter=True,
+            # Sensitive VAD: whispered taglines ("Is it in you?") sit below
+            # the default threshold; lyric filtering handles the extra recall.
+            vad_parameters=dict(threshold=0.2, min_silence_duration_ms=250),
             beam_size=5,
             word_timestamps=True,
             condition_on_previous_text=False,
