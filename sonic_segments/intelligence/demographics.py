@@ -35,6 +35,8 @@ class MusicDirection:
     style_keywords: list[str] = field(default_factory=list)
     example_artists: list[str] = field(default_factory=list)
     rationale: str = ""
+    geo_id: str = ""
+    geo_label: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +52,8 @@ class MusicDirection:
             "style_keywords": self.style_keywords,
             "example_artists": self.example_artists,
             "rationale": self.rationale,
+            "geo_id": self.geo_id,
+            "geo_label": self.geo_label,
         }
 
 
@@ -84,8 +88,14 @@ class DemographicsKB:
             raise KeyError(f"Unknown demographic segment: {segment_id}")
         return self.segments[segment_id]
 
-    def direction(self, segment_id: str, mood: str) -> MusicDirection:
-        """Merge a segment's preferences with the requested mood."""
+    def direction(self, segment_id: str, mood: str, geo: dict[str, Any] | None = None) -> MusicDirection:
+        """Merge a segment's preferences with the requested mood.
+
+        An optional geo pack (from GeoKB, data/geo_music.json) tunes the brief
+        to what that market actually streams: its genres lead, its search
+        modifiers and style keywords flavor the sourcing prompt. This is the
+        hyperpersonalization step — Gen-Z x hype is a different brief in
+        Atlanta (trap) than in Nashville (country-adjacent)."""
         segment = self.get(segment_id)
         if mood not in MOODS:
             raise KeyError(f"Unknown mood: {mood}")
@@ -116,6 +126,25 @@ class DemographicsKB:
                 f"{mood_spec['label'].lower()} characteristics (no curated override for this pair)."
             )
 
+        example_artists = segment.get("example_artists", [])
+        style_keywords = segment.get("style_keywords", [])
+
+        if geo:
+            bias = geo.get("music_bias", {})
+            boosts = bias.get("genre_boosts", [])
+            # Market genres lead the brief; segment genres keep it on-audience.
+            genres = list(dict.fromkeys(boosts[:2] + genres))[:5]
+            mods = bias.get("search_modifiers", [])
+            search_terms = [f"{adjectives[0]} {m}" for m in mods[:2]] + search_terms
+            geo_kw = bias.get("style_keywords", [])
+            if geo_kw:
+                prompt += f", with {geo_kw[0]}"
+                if len(geo_kw) > 1:
+                    prompt += f" and {geo_kw[1]}"
+            example_artists = list(dict.fromkeys(bias.get("example_artists", [])[:2] + example_artists))[:6]
+            style_keywords = list(dict.fromkeys(geo_kw[:2] + style_keywords))
+            rationale += f" Geo-tuned for {geo['label']}: {geo.get('rationale', '')}"
+
         # Mood shifts the segment's tempo/energy window toward its own targets.
         seg_tempo = segment.get("tempo_range", [70, 140])
         seg_energy = segment.get("energy_range", [0.2, 0.8])
@@ -132,9 +161,11 @@ class DemographicsKB:
             prompt=prompt,
             tempo_range=tempo_range,
             energy_range=energy_range,
-            style_keywords=segment.get("style_keywords", []),
-            example_artists=segment.get("example_artists", []),
+            style_keywords=style_keywords,
+            example_artists=example_artists,
             rationale=rationale,
+            geo_id=(geo or {}).get("id", ""),
+            geo_label=(geo or {}).get("label", ""),
         )
 
     def mood_only_direction(self, mood: str) -> MusicDirection:

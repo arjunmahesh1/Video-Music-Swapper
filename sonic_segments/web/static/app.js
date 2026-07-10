@@ -4,8 +4,10 @@ const state = {
   mode: "variants",
   moods: new Set(),
   demographics: new Set(),
+  geos: new Set(),
   sources: new Set(),
   meta: null,
+  rollout: null,
   file: null,
   spotify: { connected: false, user: null },
 };
@@ -22,14 +24,17 @@ const MODE_DEFAULTS = { demo: ["spotify"], variants: ["library", "musicgen"] };
 
 async function init() {
   startWaves();
-  const [meta, spotify] = await Promise.all([
+  const [meta, rollout, spotify] = await Promise.all([
     fetch("/api/meta").then((r) => r.json()),
+    fetch("/api/rollout/meta").then((r) => r.json()).catch(() => null),
     fetch("/api/spotify/status", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ connected: false })),
   ]);
   state.meta = meta;
+  state.rollout = rollout;
   state.spotify = spotify;
   renderMoods(meta.moods);
   renderDemographics(meta.segments);
+  if (rollout) renderGeos(rollout.geos);
 
   const flag = new URLSearchParams(location.search).get("spotify");
   if (flag) {
@@ -82,6 +87,23 @@ function renderDemographics(segments) {
       $("capNote").textContent = `${state.demographics.size} of ${MAX_DEMOS} selected`;
     };
     grid.appendChild(card);
+  });
+}
+
+function renderGeos(geos) {
+  const box = $("geoChips");
+  if (!box) return;
+  box.innerHTML = "";
+  geos.forEach((g) => {
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.textContent = g.label;
+    chip.title = `${g.genres.slice(0, 3).join(", ")}`;
+    chip.onclick = () => {
+      state.geos.has(g.id) ? state.geos.delete(g.id) : state.geos.add(g.id);
+      chip.classList.toggle("active", state.geos.has(g.id));
+    };
+    box.appendChild(chip);
   });
 }
 
@@ -148,7 +170,9 @@ function setMode(mode) {
   $("modeDemo").classList.toggle("active", mode === "demo");
   $("modeVariants").classList.toggle("active", mode === "variants");
   $("demoCard").style.display = mode === "variants" ? "block" : "none";
-  $("srcStep").textContent = mode === "variants" ? "5" : "4";
+  const geoCard = $("geoCard");
+  if (geoCard) geoCard.style.display = mode === "variants" && state.rollout ? "block" : "none";
+  $("srcStep").textContent = mode === "variants" ? "6" : "4";
   state.sources = new Set(
     MODE_DEFAULTS[mode].filter((id) => {
       if (id === "spotify") return state.spotify.connected;
@@ -195,7 +219,8 @@ function saveDraft() {
     ts: Date.now(), mode: state.mode,
     brand: $("brand").value, vibe: $("vibe").value, url: $("adUrl").value,
     transcript: $("transcript").value, refQuery: $("refQuery").value,
-    moods: [...state.moods], demographics: [...state.demographics], sources: [...state.sources],
+    moods: [...state.moods], demographics: [...state.demographics],
+    geos: [...state.geos], sources: [...state.sources],
   }));
 }
 function restoreDraft() {
@@ -207,10 +232,14 @@ function restoreDraft() {
     $("refQuery").value = d.refQuery || "";
     state.moods = new Set(d.moods || []);
     state.demographics = new Set(d.demographics || []);
+    state.geos = new Set(d.geos || []);
     [...$("moodChips").children].forEach((chip, i) =>
       chip.classList.toggle("active", state.moods.has(state.meta.moods[i].id)));
     [...$("demoGrid").children].forEach((card, i) =>
       card.classList.toggle("active", state.demographics.has(state.meta.segments[i].id)));
+    if (state.rollout)
+      [...$("geoChips").children].forEach((chip, i) =>
+        chip.classList.toggle("active", state.geos.has(state.rollout.geos[i].id)));
     $("capNote").textContent = `${state.demographics.size} of ${MAX_DEMOS} selected`;
     setMode(d.mode || "variants");
     state.sources = new Set(d.sources || []);
@@ -252,6 +281,7 @@ $("intakeForm").onsubmit = async (e) => {
   fd.append("url", $("adUrl").value.trim());
   fd.append("moods", [...state.moods].join(","));
   fd.append("demographics", [...state.demographics].join(","));
+  fd.append("geos", state.mode === "variants" ? [...state.geos].join(",") : "");
   fd.append("sources", [...state.sources].join(","));
   fd.append("reference_query", $("refQuery").value);
   fd.append("transcript", $("transcript").value);

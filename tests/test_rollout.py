@@ -148,6 +148,22 @@ def test_validate_plan_catches_corruption(sample_manifest):
     assert any("PAUSED" in i for i in issues)
 
 
+def test_geo_tuned_direction_changes_the_brief():
+    """Same segment+mood must produce a different music brief per market."""
+    demo = DemographicsKB.default()
+    geo_kb = GeoKB.default()
+    base = demo.direction("gen_z", "hype")
+    atlanta = demo.direction("gen_z", "hype", geo=geo_kb.get("atlanta_dma"))
+    london = demo.direction("gen_z", "hype", geo=geo_kb.get("uk_london"))
+    assert atlanta.geo_id == "atlanta_dma" and base.geo_id == ""
+    assert atlanta.genres != london.genres
+    assert atlanta.search_terms[0] != base.search_terms[0]
+    assert "uk drill" in london.genres
+    assert "Geo-tuned" in atlanta.rationale
+    # geo fields survive the manifest round-trip
+    assert atlanta.as_dict()["geo_label"].startswith("Atlanta")
+
+
 def test_plan_rejects_empty_inputs(sample_manifest):
     with pytest.raises(ValueError):
         RolloutPlanner().plan({"variants": []}, ["meta"])

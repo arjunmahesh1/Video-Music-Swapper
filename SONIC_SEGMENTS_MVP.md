@@ -2,6 +2,7 @@
 
 > **The product site is live.** Run it with:
 >
+The repo now hosts the full Sonic Segments product on top of the original engine:
 > ```bash
 > python -m uvicorn sonic_segments.web.main:app --port 8000
 > ```
@@ -17,10 +18,13 @@ sonic_segments/
   intelligence/   # local SOTA reasoning (no online APIs)
     clap_model.py   - LAION CLAP zero-shot audio-text engine (lazy singleton)
     mood.py         - 10-mood taxonomy; CLAP + DSP fusion; major/minor valence prior
-    demographics.py - 16-segment demographic -> music-direction knowledge base
+    demographics.py - 30-segment demographic -> music-direction knowledge base (geo-tunable)
     matching.py     - track-vs-brief scoring (style/mood/tempo/energy)
     quality.py      - ffprobe compression red-flags for pulled sources
+    rollout.py      - distribution intelligence: variants -> platform-ready ad units
   data/demographics.json  # research-grounded KB (sources cited in _meta)
+  data/ad_platforms.json  # how Meta/Google/DV360/TikTok/Spotify deliver variants (cited)
+  data/geo_music.json     # 18 geo music-affinity packs from public streaming research
   sources/        # unified MusicSource interface
     local_catalog.py  - your licensed folders (audio/, library/)   [CLEARED]
     jamendo.py        - Creative Commons API catalog               [CLEARED, needs JAMENDO_CLIENT_ID]
@@ -31,9 +35,22 @@ sonic_segments/
   pipeline/
     ingest.py   - upload or yt-dlp URL pull + quality flagging
     jobs.py     - persistent job store, serial heavy-work executor
-    campaign.py - analyze once -> direction per (demographic, mood) -> source/rank/render
-  web/          - FastAPI site: intake one-pager, status page, A/B preview
+    campaign.py - analyze once -> direction per (demographic, mood[, geo]) -> source/rank/render
+    export.py   - rollout bundle: API payloads, Editor CSV, SDF, Spotify-spec audio, brief, zip
+  publish.py    - deployment simulator (dry-run prints exact API calls; live = Meta sandbox only)
+  web/          - FastAPI site: intake one-pager, status page, A/B preview + rollout planner
 ```
+
+### The distribution layer (what we sell)
+
+One ad in → up to 5 re-scored cuts → a **rollout plan**: one paused ad set /
+ad group / line item per (audience × market × platform), each with the exact
+targeting spec (ZIP/DMA/radius geo, age, music-interest / streamed-genre
+targeting) that platform already supports. Geo packs tune the music brief
+itself — Gen-Z ✕ Atlanta leads with trap, Gen-Z ✕ London leads with UK drill —
+grounded in public streaming research. See `DEPLOYMENT.md` for the testing
+regime and per-platform launch mechanics; benchmarks via
+`python -m eval.rollout_benchmark`.
 
 ### The two flows
 

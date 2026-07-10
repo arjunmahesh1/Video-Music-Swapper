@@ -18,3 +18,4 @@ jinja2
 python-multipart
 requests
 audio-separator[cpu]
+pytest  # dev: tests/ + eval benchmarks (see DEPLOYMENT.md)

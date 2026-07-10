@@ -84,9 +84,52 @@
     </div>
   </div>
 
+  <div class="card" id="rolloutCard">
+    <h2>Roll it out</h2>
+    <p class="kv" style="margin-bottom:14px">
+      Turn these cuts into a <b>micro-targeted distribution plan</b>: one paused, ready-to-traffic
+      ad set per audience ✕ market ✕ platform — built entirely on the targeting controls
+      Meta, Google, TikTok and Spotify already give you. Nothing spends until a human enables it.
+    </p>
+
+    <label class="fld">Platforms</label>
+    <div class="chips" id="platformChips"></div>
+
+    <label class="fld">Markets <span style="color:var(--muted);font-weight:300">(optional — each audience is matched to the markets that stream its sound)</span></label>
+    <div class="chips" id="rolloutGeoChips"></div>
+
+    <div class="row" style="margin-top:16px;align-items:end">
+      <div>
+        <label class="fld">Test budget to split across ad units (USD)</label>
+        <input type="text" id="rolloutBudget" value="1000" inputmode="decimal">
+      </div>
+      <div>
+        <button class="btn" id="rolloutBtn" type="button">Build rollout plan →</button>
+      </div>
+    </div>
+    <div class="err" id="rolloutErr"></div>
+
+    <div id="rolloutResult" style="display:none">
+      <div class="meta-grid" id="rolloutStats"></div>
+      <div id="rolloutIssues"></div>
+      <div id="rolloutUnits"></div>
+      <div class="dl-row" style="margin-top:18px">
+        <a class="btn" id="bundleLink" href="#" download>Download trafficking bundle (.zip)</a>
+        <a class="btn secondary" id="briefLink" href="#" target="_blank">Read the brief</a>
+      </div>
+      <p class="kv" style="margin-top:12px">
+        Bundle contains: Meta Marketing API payloads · Google Ads Editor CSV · DV360 SDF line items
+        (the CTV / YouTube TV path) · TikTok ad groups · Spotify genre-targeted ad sets with
+        spec-mastered audio · a per-unit rationale brief. Simulate the deployment locally:
+        <b>python -m sonic_segments.publish --job {{ m.id }} --platform meta</b>
+      </p>
+    </div>
+  </div>
+
   <footer class="site">Re-scored by Sonic Segments. Demo-only cuts carry an audible watermark and are not licensed for delivery.</footer>
 </div>
 
+<script type="application/json" id="manifestData">{{ manifest_json | safe }}</script>
 <script>
 const player = document.getElementById("player");
 const pills = [...document.querySelectorAll(".pill[data-src]")];
@@ -116,6 +159,79 @@ document.getElementById("flipBtn").onclick = () => {
 player.addEventListener("loadedmetadata", () => {
   if (pendingSeek != null) { player.currentTime = pendingSeek; pendingSeek = null; }
 });
+
+/* ---- rollout planner ---- */
+const manifest = JSON.parse(document.getElementById("manifestData").textContent);
+const selPlatforms = new Set(["meta", "google_ads", "spotify"]);
+const selGeos = new Set();
+
+function chip(box, label, title, set, id, active) {
+  const el = document.createElement("div");
+  el.className = "chip" + (active ? " active" : "");
+  el.textContent = label;
+  if (title) el.title = title;
+  if (active) set.add(id);
+  el.onclick = () => {
+    set.has(id) ? set.delete(id) : set.add(id);
+    el.classList.toggle("active", set.has(id));
+  };
+  box.appendChild(el);
+}
+
+fetch("/api/rollout/meta").then(r => r.json()).then(meta => {
+  const pBox = document.getElementById("platformChips");
+  meta.platforms.forEach(p => chip(pBox, p.label, p.music_targeting, selPlatforms, p.id, selPlatforms.has(p.id)));
+  const gBox = document.getElementById("rolloutGeoChips");
+  const baked = new Set(manifest.variants.map(v => v.geo_id).filter(Boolean));
+  meta.geos.forEach(g => chip(gBox, g.label, g.genres.slice(0, 3).join(", "), selGeos, g.id, baked.has(g.id)));
+}).catch(() => {});
+
+document.getElementById("rolloutBtn").onclick = async () => {
+  const btn = document.getElementById("rolloutBtn"), err = document.getElementById("rolloutErr");
+  err.textContent = "";
+  if (!selPlatforms.size) return (err.textContent = "Pick at least one platform.");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Planning…';
+  try {
+    const fd = new FormData();
+    fd.append("platforms", [...selPlatforms].join(","));
+    fd.append("geos", [...selGeos].join(","));
+    fd.append("budget", parseFloat(document.getElementById("rolloutBudget").value) || 1000);
+    const resp = await fetch(`/api/campaigns/${manifest.id}/rollout`, { method: "POST", body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || "Planning failed.");
+    renderRollout(data);
+  } catch (ex) {
+    err.textContent = ex.message;
+  }
+  btn.disabled = false;
+  btn.textContent = "Rebuild rollout plan →";
+};
+
+function renderRollout(data) {
+  const s = data.summary;
+  document.getElementById("rolloutStats").innerHTML = `
+    <div class="meta-box"><span>Cuts</span><b>${s.variants}</b></div>
+    <div class="meta-box"><span>Ad units</span><b>${s.ad_units}</b></div>
+    <div class="meta-box"><span>Platforms</span><b>${s.platforms}</b></div>
+    <div class="meta-box"><span>Markets</span><b>${s.geos}</b></div>`;
+  document.getElementById("rolloutIssues").innerHTML = (data.issues || [])
+    .map(i => `<div class="warn-line">⚠ ${i}</div>`).join("");
+  document.getElementById("rolloutUnits").innerHTML = data.ad_units.map(u => `
+    <div class="variant-detail">
+      <b style="font-size:14.5px">${u.name}</b>
+      <span class="badge legal" style="margin-left:8px">${u.platform_label}</span>
+      <p class="kv" style="margin-top:4px">
+        ${u.segment_label} · <b>${u.geo_label}</b> · cut: ${u.variant_label} · budget $${u.budget.toFixed(2)}
+      </p>
+      <p class="kv" style="margin-top:4px">${u.why}</p>
+    </div>`).join("");
+  const bundle = document.getElementById("bundleLink");
+  bundle.href = data.bundle_url;
+  document.getElementById("briefLink").href = data.brief_url;
+  document.getElementById("rolloutResult").style.display = "block";
+  document.getElementById("rolloutResult").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
 </script>
 </body>
 </html>

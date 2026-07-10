@@ -18,9 +18,10 @@ from fastapi.templating import Jinja2Templates
 
 load_dotenv()
 
-from ..intelligence import DemographicsKB
+from ..intelligence import AdPlatformsKB, DemographicsKB, GeoKB, RolloutPlanner
 from ..intelligence.mood import MOODS
 from ..pipeline.campaign import prepare_and_run
+from ..pipeline.export import build_rollout_bundle
 from ..pipeline.jobs import JobStore
 from ..sources import sources_info
 
@@ -80,6 +81,52 @@ def meta():
     }
 
 
+@app.get("/api/rollout/meta")
+def rollout_meta():
+    """Everything the rollout planner UI needs: platforms + geo packs."""
+    return {
+        "platforms": AdPlatformsKB.default().list_platforms(),
+        "geos": GeoKB.default().list_geos(),
+    }
+
+
+@app.post("/api/campaigns/{job_id}/rollout")
+def build_rollout(job_id: str, platforms: str = Form(""), geos: str = Form(""), budget: float = Form(1000.0)):
+    """Plan + package the distribution bundle for a finished campaign.
+
+    Pure KB work + file shaping (no models), so it runs synchronously."""
+    job = JobStore.get().get_job(job_id)
+    if job is None:
+        raise HTTPException(404, "Unknown campaign.")
+    manifest_path = job.dir / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(409, "Campaign has no rendered variants yet.")
+    platform_list = [p for p in platforms.split(",") if p.strip()]
+    geo_list = [g for g in geos.split(",") if g.strip()]
+    if not platform_list:
+        raise HTTPException(400, "Pick at least one platform.")
+
+    manifest = json.loads(manifest_path.read_text())
+    try:
+        plan = RolloutPlanner().plan(manifest, platform_list, geo_ids=geo_list or None, total_budget=budget)
+        bundle = build_rollout_bundle(job.dir, manifest, plan)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {
+        "summary": plan["summary"],
+        "issues": plan["issues"],
+        "skipped": plan["skipped"],
+        "ad_units": [
+            {k: u[k] for k in ("name", "platform", "platform_label", "variant_label",
+                               "segment_label", "geo_label", "budget", "why")}
+            for u in plan["ad_units"]
+        ],
+        "bundle_url": f"/media/{job_id}/rollout_bundle.zip",
+        "brief_url": f"/media/{job_id}/rollout/rollout_plan.md",
+        "files": bundle["files"],
+    }
+
+
 @app.post("/api/campaigns")
 async def create_campaign(
     mode: str = Form("variants"),
@@ -88,6 +135,7 @@ async def create_campaign(
     url: str = Form(""),
     moods: str = Form(""),
     demographics: str = Form(""),
+    geos: str = Form(""),
     sources: str = Form(""),
     reference_query: str = Form(""),
     transcript: str = Form(""),
@@ -96,6 +144,7 @@ async def create_campaign(
 ):
     mood_list = [m for m in moods.split(",") if m.strip()]
     demo_list = [d for d in demographics.split(",") if d.strip()]
+    geo_list = [g for g in geos.split(",") if g.strip()]
     source_list = [s for s in sources.split(",") if s.strip()]
 
     if not mood_list:
@@ -118,6 +167,7 @@ async def create_campaign(
         "staged_file": str(staged_video) if staged_video else None,
         "moods": mood_list,
         "demographics": demo_list,
+        "geos": geo_list,
         "sources": source_list,
         "reference_query": reference_query.strip() or None,
         "transcript": transcript.strip() or None,

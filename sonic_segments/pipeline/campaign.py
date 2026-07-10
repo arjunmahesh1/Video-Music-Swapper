@@ -17,7 +17,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from ..intelligence import DemographicsKB, detect_mood, rank_tracks
+from ..intelligence import DemographicsKB, GeoKB, detect_mood, rank_tracks
 from ..intelligence.demographics import MusicDirection
 from ..sources import get_sources
 from .jobs import Job
@@ -110,9 +110,14 @@ def run_campaign(job: Job) -> dict[str, Any]:
     if mode == "demo":
         targets = [kb.mood_only_direction(m) for m in moods[:3]]
     else:
+        geo_ids: list[str] = params.get("geos") or []
+        geo_kb = GeoKB.default() if geo_ids else None
         for segment_id in demographics[:MAX_CUTS]:
+            geo = _pick_geo(geo_kb, geo_ids, segment_id)
+            if geo is not None:
+                job.log(f"Geo focus for {segment_id}: {geo['label']} ({', '.join(geo['music_bias']['genre_boosts'][:2])})")
             for mood in moods:
-                targets.append(kb.direction(segment_id, mood))
+                targets.append(kb.direction(segment_id, mood, geo=geo))
     targets = targets[:MAX_CUTS]
     if not targets:
         raise ValueError("No targets: pick at least one mood (and demographics for scored variants).")
@@ -130,6 +135,8 @@ def run_campaign(job: Job) -> dict[str, Any]:
     for idx, direction in enumerate(targets, start=1):
         pct = base_pct + (idx - 1) * span
         label = f"{direction.segment_label} · {direction.mood_label}"
+        if direction.geo_label:
+            label += f" · {direction.geo_label.split(' (')[0]}"
         job.log(f"[{idx}/{len(targets)}] Sourcing music for {label}...", pct=pct)
 
         candidates: list[dict[str, Any]] = []
@@ -166,7 +173,8 @@ def run_campaign(job: Job) -> dict[str, Any]:
             + f" (score {winner['match']['total']:.2f}, via {winner['source']})"
         )
 
-        out_name = f"{idx:02d}_{direction.segment_id}_{direction.mood}.mp4"
+        geo_suffix = f"_{direction.geo_id}" if direction.geo_id else ""
+        out_name = f"{idx:02d}_{direction.segment_id}_{direction.mood}{geo_suffix}.mp4"
         job.log(f"  Rendering re-scored cut (separation + ducking + mux)...", pct=pct + span // 2)
         try:
             render = _render(
@@ -186,6 +194,8 @@ def run_campaign(job: Job) -> dict[str, Any]:
                 "segment_label": direction.segment_label,
                 "mood": direction.mood,
                 "mood_label": direction.mood_label,
+                "geo_id": direction.geo_id,
+                "geo_label": direction.geo_label,
                 "direction": direction.as_dict(),
                 "track": {
                     "name": winner["name"],
@@ -223,6 +233,18 @@ def run_campaign(job: Job) -> dict[str, Any]:
     }
     (job.dir / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str))
     return manifest
+
+
+def _pick_geo(geo_kb: GeoKB | None, geo_ids: list[str], segment_id: str) -> dict[str, Any] | None:
+    """Best geo pack for this segment among the user's picks: prefer a market
+    whose streaming profile matches the audience, else the first valid pick."""
+    if not geo_kb or not geo_ids:
+        return None
+    chosen = [geo_kb.geos[g] for g in geo_ids if g in geo_kb.geos]
+    for geo in chosen:
+        if segment_id in geo.get("affinity_segments", []):
+            return geo
+    return chosen[0] if chosen else None
 
 
 def _full_mix(video_path: Path, stems_dir: Path) -> Path:

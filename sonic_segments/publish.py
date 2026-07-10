@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,7 +44,7 @@ def build_meta_requests(plan: dict[str, Any], ad_account: str = "act_<AD_ACCOUNT
         "method": "POST",
         "url": f"{GRAPH}/{ad_account}/campaigns",
         "body": {
-            "name": f"SS_{plan['brand']}_{plan['campaign_id'][:8]}".upper(),
+            "name": re.sub(r"[^A-Za-z0-9]+", "_", f"SS_{plan['brand']}_{plan['campaign_id'][:8]}").upper(),
             "objective": "OUTCOME_AWARENESS",
             "special_ad_categories": [],
             "status": "PAUSED",
