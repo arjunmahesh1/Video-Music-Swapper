@@ -1,0 +1,413 @@
+{
+  "_meta": {
+    "version": 1,
+    "updated": "2026-07-09",
+    "research_notes": "Geo music-affinity packs: what a market actually streams, from public sources — city/state Spotify chart analyses, Spotify's own research on place and musical identity, and the Nature study on cultural divergence in streaming. Empirical anchors: Kendrick Lamar ~10% of streaming in California cities and strong in Detroit/Portland/Phoenix but minimal in Memphis/Nashville where country dominates; local-genre loyalty is strongest where a distinctive regional style exists (country, regional mexican, funk carioca, afrobeats, grime). A pack MODULATES a demographic direction (genre boosts, style keywords, search modifiers) and carries the platform geo keys needed to actually buy that market. This is the hyperpersonalization layer: segment x geo -> a music brief no brand tunes by hand today.",
+    "sources": [
+      "https://bleumag.com/music/american-artists-rule-spotify-charts-at-home-and-abroad/",
+      "https://www.skoove.com/blog/spotify-local-vs-global-music-us/",
+      "https://www.skoove.com/blog/spotify-local-vs-global-music/",
+      "https://research.atspotify.com/2019/07/environmental-changes-and-the-dynamics-of-musical-identity",
+      "https://research.atspotify.com/2024/05/exploring-local-musics-place-in-global-streaming",
+      "https://www.nature.com/articles/s41599-021-00855-1"
+    ]
+  },
+  "geos": [
+    {
+      "id": "atlanta_dma",
+      "label": "Atlanta (DMA 524)",
+      "level": "dma",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"cities": ["Atlanta, GA"], "regions": []},
+        "google_ads": ["Atlanta GA, United States (DMA)"],
+        "dv360": ["DMA 524 Atlanta GA"],
+        "tiktok": ["Atlanta (DMA)"],
+        "spotify": ["Atlanta, GA metro"]
+      },
+      "music_bias": {
+        "genre_boosts": ["trap", "southern hip hop"],
+        "style_keywords": ["heavy 808s", "rolling hi-hats", "dark synth stabs"],
+        "example_artists": ["Future", "21 Savage", "Latto"],
+        "search_modifiers": ["atlanta trap"]
+      },
+      "affinity_segments": ["urban_hiphop", "gen_z", "rnb_neosoul", "gospel_ccm"],
+      "rationale": "Atlanta is the production capital of trap; hometown-artist loyalty is measurably high in Southern hip-hop markets.",
+      "sources": ["https://bleumag.com/music/american-artists-rule-spotify-charts-at-home-and-abroad/"]
+    },
+    {
+      "id": "nashville_dma",
+      "label": "Nashville (DMA 659)",
+      "level": "dma",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"cities": ["Nashville, TN"], "regions": []},
+        "google_ads": ["Nashville TN, United States (DMA)"],
+        "dv360": ["DMA 659 Nashville TN"],
+        "tiktok": ["Nashville (DMA)"],
+        "spotify": ["Nashville, TN metro"]
+      },
+      "music_bias": {
+        "genre_boosts": ["country", "country pop", "americana"],
+        "style_keywords": ["acoustic guitar", "pedal steel", "stomp claps"],
+        "example_artists": ["Morgan Wallen", "Luke Combs", "Lainey Wilson"],
+        "search_modifiers": ["modern country anthem"]
+      },
+      "affinity_segments": ["country_heartland", "gen_x", "millennial_parents", "gospel_ccm"],
+      "rationale": "Chart analyses show country dominating Nashville/Memphis streaming where West-Coast hip-hop barely registers — the single clearest geo music split in the US.",
+      "sources": ["https://bleumag.com/music/american-artists-rule-spotify-charts-at-home-and-abroad/"]
+    },
+    {
+      "id": "texas_triangle",
+      "label": "Texas Triangle (Dallas–Houston–Austin–San Antonio)",
+      "level": "region",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"regions": ["Texas"], "cities": []},
+        "google_ads": ["Texas, United States"],
+        "dv360": ["DMA 623 Dallas-Ft. Worth TX", "DMA 618 Houston TX", "DMA 635 Austin TX", "DMA 641 San Antonio TX"],
+        "tiktok": ["Texas"],
+        "spotify": ["Texas"]
+      },
+      "music_bias": {
+        "genre_boosts": ["country", "regional mexican", "texas country", "chopped and screwed hip hop"],
+        "style_keywords": ["twangy guitars", "accordion accents", "slowed heavy bass"],
+        "example_artists": ["Cody Johnson", "Grupo Frontera", "Travis Scott"],
+        "search_modifiers": ["texas country", "musica mexicana"]
+      },
+      "affinity_segments": ["country_heartland", "latam_youth", "urban_hiphop", "millennial_parents"],
+      "rationale": "Texas splits three ways — country, música mexicana (border-market regional loyalty), and Houston hip-hop — so one national score leaves two-thirds of the state cold.",
+      "sources": ["https://www.skoove.com/blog/spotify-local-vs-global-music-us/", "https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
+      "id": "miami_sofla",
+      "label": "Miami / South Florida (DMA 528)",
+      "level": "dma",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"cities": ["Miami, FL", "Fort Lauderdale, FL"], "regions": []},
+        "google_ads": ["Miami-Ft. Lauderdale FL, United States (DMA)"],
+        "dv360": ["DMA 528 Miami-Ft. Lauderdale FL"],
+        "tiktok": ["Miami-Ft. Lauderdale (DMA)"],
+        "spotify": ["Miami, FL metro"]
+      },
+      "music_bias": {
+        "genre_boosts": ["reggaeton", "latin trap", "latin pop"],
+        "style_keywords": ["dembow rhythm", "tropical percussion", "spanish vocal hooks"],
+        "example_artists": ["Bad Bunny", "Karol G", "Feid"],
+        "search_modifiers": ["reggaeton party", "latin urbano"]
+      },
+      "affinity_segments": ["latam_youth", "gen_z", "island_dancehall", "festival_edm"],
+      "rationale": "US-Hispanic gateway market; Spanish-language urbano over-indexes vs any other US metro.",
+      "sources": ["https://www.skoove.com/blog/spotify-local-vs-global-music/", "https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
+      "id": "la_metro",
+      "label": "Los Angeles (DMA 803)",
+      "level": "dma",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"cities": ["Los Angeles, CA"], "regions": []},
+        "google_ads": ["Los Angeles CA, United States (DMA)"],
+        "dv360": ["DMA 803 Los Angeles CA"],
+        "tiktok": ["Los Angeles (DMA)"],
+        "spotify": ["Los Angeles, CA metro"]
+      },
+      "music_bias": {
+        "genre_boosts": ["west coast hip hop", "latin pop", "indie pop"],
+        "style_keywords": ["g-funk synth leads", "laid-back groove", "sunny hooks"],
+        "example_artists": ["Kendrick Lamar", "Becky G", "Tyler, the Creator"],
+        "search_modifiers": ["west coast hip hop"]
+      },
+      "affinity_segments": ["urban_hiphop", "gen_z", "latam_youth", "indie_alt"],
+      "rationale": "Kendrick alone is ~10% of streaming in California cities; LA also carries a huge Spanish-language audience — two distinct scores for one metro.",
+      "sources": ["https://bleumag.com/music/american-artists-rule-spotify-charts-at-home-and-abroad/"]
+    },
+    {
+      "id": "ny_metro",
+      "label": "New York (DMA 501)",
+      "level": "dma",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"cities": ["New York, NY"], "regions": []},
+        "google_ads": ["New York NY, United States (DMA)"],
+        "dv360": ["DMA 501 New York NY"],
+        "tiktok": ["New York (DMA)"],
+        "spotify": ["New York, NY metro"]
+      },
+      "music_bias": {
+        "genre_boosts": ["drill", "east coast hip hop", "latin urbano", "house"],
+        "style_keywords": ["sliding 808s", "boom bap swing", "club-ready four-on-the-floor"],
+        "example_artists": ["Cardi B", "A Boogie wit da Hoodie", "Ice Spice"],
+        "search_modifiers": ["ny drill", "east coast hip hop"]
+      },
+      "affinity_segments": ["urban_hiphop", "gen_z", "latam_youth", "underground_club", "rnb_neosoul"],
+      "rationale": "Drill and Latin urbano both over-index; dense transit/mobile listening favors punchy short-form mixes.",
+      "sources": ["https://research.atspotify.com/2019/07/environmental-changes-and-the-dynamics-of-musical-identity"]
+    },
+    {
+      "id": "chicago_dma",
+      "label": "Chicago (DMA 602)",
+      "level": "dma",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"cities": ["Chicago, IL"], "regions": []},
+        "google_ads": ["Chicago IL, United States (DMA)"],
+        "dv360": ["DMA 602 Chicago IL"],
+        "tiktok": ["Chicago (DMA)"],
+        "spotify": ["Chicago, IL metro"]
+      },
+      "music_bias": {
+        "genre_boosts": ["drill", "house", "gospel", "r&b"],
+        "style_keywords": ["chicago house piano", "soulful vocal chops", "hard drill drums"],
+        "example_artists": ["Chance the Rapper", "Green Velvet", "Kierra Sheard"],
+        "search_modifiers": ["chicago house", "soulful house"]
+      },
+      "affinity_segments": ["urban_hiphop", "underground_club", "gospel_ccm", "rnb_neosoul"],
+      "rationale": "Birthplace of house and drill with a deep gospel tradition — three ownable sonic lanes in one DMA.",
+      "sources": ["https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
+      "id": "us_south_heartland",
+      "label": "US South & Heartland (multi-state)",
+      "level": "region",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"regions": ["Tennessee", "Kentucky", "Alabama", "Mississippi", "Arkansas", "Oklahoma"], "cities": []},
+        "google_ads": ["Tennessee, United States", "Kentucky, United States", "Alabama, United States", "Mississippi, United States", "Arkansas, United States", "Oklahoma, United States"],
+        "dv360": ["DMA 640 Memphis TN", "DMA 659 Nashville TN", "DMA 630 Birmingham AL", "DMA 650 Oklahoma City OK"],
+        "tiktok": ["Tennessee", "Kentucky", "Alabama", "Mississippi", "Arkansas", "Oklahoma"],
+        "spotify": ["Tennessee", "Alabama", "Kentucky"]
+      },
+      "music_bias": {
+        "genre_boosts": ["country", "southern rock", "gospel"],
+        "style_keywords": ["anthemic guitars", "gang vocals", "front-porch warmth"],
+        "example_artists": ["Zach Bryan", "Jelly Roll", "Chris Stapleton"],
+        "search_modifiers": ["heartland country rock"]
+      },
+      "affinity_segments": ["country_heartland", "gen_x", "boomers_55plus", "gospel_ccm", "metal_hardrock"],
+      "rationale": "The strongest local-genre loyalty belt in the US: chart data shows country/gospel crowding out coastal hip-hop.",
+      "sources": ["https://bleumag.com/music/american-artists-rule-spotify-charts-at-home-and-abroad/"]
+    },
+    {
+      "id": "pacific_northwest",
+      "label": "Pacific Northwest (Seattle + Portland)",
+      "level": "region",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"cities": ["Seattle, WA", "Portland, OR"], "regions": []},
+        "google_ads": ["Seattle-Tacoma WA, United States (DMA)", "Portland OR, United States (DMA)"],
+        "dv360": ["DMA 819 Seattle-Tacoma WA", "DMA 820 Portland OR"],
+        "tiktok": ["Seattle-Tacoma (DMA)", "Portland (DMA)"],
+        "spotify": ["Seattle, WA metro", "Portland, OR metro"]
+      },
+      "music_bias": {
+        "genre_boosts": ["indie rock", "indie folk", "alternative"],
+        "style_keywords": ["jangly guitars", "reverb-washed vocals", "moody atmospherics"],
+        "example_artists": ["Fleet Foxes", "ODESZA", "Modest Mouse"],
+        "search_modifiers": ["indie folk atmospheric"]
+      },
+      "affinity_segments": ["indie_alt", "sad_indie_folk", "young_millennials", "lofi_study", "wellness"],
+      "rationale": "Indie/alt heartland; also one of the West-Coast-conscious-rap-friendly markets (Portland over-indexes Kendrick).",
+      "sources": ["https://bleumag.com/music/american-artists-rule-spotify-charts-at-home-and-abroad/"]
+    },
+    {
+      "id": "us_college_towns",
+      "label": "US College Towns (radius packs)",
+      "level": "radius",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"custom_locations": [{"name": "Austin, TX", "radius_miles": 15}, {"name": "Ann Arbor, MI", "radius_miles": 10}, {"name": "Boulder, CO", "radius_miles": 10}, {"name": "Athens, GA", "radius_miles": 10}]},
+        "google_ads": ["Austin TX +15mi", "Ann Arbor MI +10mi", "Boulder CO +10mi", "Athens GA +10mi"],
+        "dv360": ["postal-code lists per campus"],
+        "tiktok": ["Austin (radius)", "Ann Arbor (radius)", "Boulder (radius)", "Athens (radius)"],
+        "spotify": ["Austin, TX metro", "Denver-Boulder, CO metro"]
+      },
+      "music_bias": {
+        "genre_boosts": ["indie pop", "edm", "pop punk", "hyperpop"],
+        "style_keywords": ["big drops", "singalong hooks", "dorm-party energy"],
+        "example_artists": ["Dominic Fike", "John Summit", "Role Model"],
+        "search_modifiers": ["college party anthem"]
+      },
+      "affinity_segments": ["gen_z", "festival_edm", "pop_punk_emo", "indie_alt", "y2k_nostalgia"],
+      "rationale": "Radius targeting around campuses is the sharpest legal micro-geo available on every platform (Meta pin radius 1–50mi, TikTok US radius) — demographically self-selecting without using any restricted attribute.",
+      "sources": ["https://www.adenslab.com/blog/geo-targeting-local-meta-ads-guide", "https://ads.tiktok.com/help/article/location-targeting"]
+    },
+    {
+      "id": "uk_london",
+      "label": "United Kingdom (London-led)",
+      "level": "country",
+      "country": "GB",
+      "platform_geo": {
+        "meta": {"countries": ["GB"], "cities": ["London"]},
+        "google_ads": ["United Kingdom", "London, United Kingdom"],
+        "dv360": ["United Kingdom", "London"],
+        "tiktok": ["United Kingdom"],
+        "spotify": ["United Kingdom"]
+      },
+      "music_bias": {
+        "genre_boosts": ["uk drill", "grime", "uk garage", "afroswing"],
+        "style_keywords": ["skippy 2-step drums", "gliding 808s", "UK MC cadence"],
+        "example_artists": ["Central Cee", "Dave", "PinkPantheress"],
+        "search_modifiers": ["uk drill", "uk garage revival"]
+      },
+      "affinity_segments": ["urban_hiphop", "gen_z", "underground_club", "afrobeats_africa"],
+      "rationale": "UK rap/garage are distinctive local styles with strong home-chart presence — a US hip-hop score reads generic in London.",
+      "sources": ["https://www.skoove.com/blog/spotify-local-vs-global-music/", "https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
+      "id": "germany_berlin",
+      "label": "Germany (Berlin club axis)",
+      "level": "country",
+      "country": "DE",
+      "platform_geo": {
+        "meta": {"countries": ["DE"], "cities": ["Berlin"]},
+        "google_ads": ["Germany", "Berlin, Germany"],
+        "dv360": ["Germany", "Berlin"],
+        "tiktok": ["Germany"],
+        "spotify": ["Germany"]
+      },
+      "music_bias": {
+        "genre_boosts": ["techno", "melodic house", "deutschrap"],
+        "style_keywords": ["driving four-on-the-floor", "analog synth pulse", "minimal builds"],
+        "example_artists": ["Boris Brejcha", "Apache 207", "Paul Kalkbrenner"],
+        "search_modifiers": ["melodic techno drive"]
+      },
+      "affinity_segments": ["underground_club", "festival_edm", "gen_z", "young_millennials"],
+      "rationale": "Germany streams local (deutschrap dominates home charts) and techno is the national club language.",
+      "sources": ["https://www.skoove.com/blog/spotify-local-vs-global-music/"]
+    },
+    {
+      "id": "mexico",
+      "label": "Mexico",
+      "level": "country",
+      "country": "MX",
+      "platform_geo": {
+        "meta": {"countries": ["MX"], "cities": ["Mexico City", "Guadalajara", "Monterrey"]},
+        "google_ads": ["Mexico"],
+        "dv360": ["Mexico"],
+        "tiktok": ["Mexico"],
+        "spotify": ["Mexico"]
+      },
+      "music_bias": {
+        "genre_boosts": ["corridos tumbados", "regional mexican", "reggaeton", "cumbia"],
+        "style_keywords": ["requinto guitars", "brass hits", "charchetas"],
+        "example_artists": ["Peso Pluma", "Fuerza Regida", "Junior H"],
+        "search_modifiers": ["corridos tumbados", "musica mexicana moderna"]
+      },
+      "affinity_segments": ["latam_youth", "gen_z", "india_family"],
+      "rationale": "Mexico has among the highest local-artist streaming shares in the world; corridos tumbados took over both MX and US-border charts.",
+      "sources": ["https://www.skoove.com/blog/spotify-local-vs-global-music/", "https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
+      "id": "brazil",
+      "label": "Brazil",
+      "level": "country",
+      "country": "BR",
+      "platform_geo": {
+        "meta": {"countries": ["BR"], "cities": ["São Paulo", "Rio de Janeiro"]},
+        "google_ads": ["Brazil"],
+        "dv360": ["Brazil"],
+        "tiktok": ["Brazil"],
+        "spotify": ["Brazil"]
+      },
+      "music_bias": {
+        "genre_boosts": ["funk carioca", "sertanejo", "brazilian pop"],
+        "style_keywords": ["tamborzão beat", "accordion swing", "carnival percussion"],
+        "example_artists": ["Anitta", "MC Kevinho", "Ana Castela"],
+        "search_modifiers": ["funk carioca", "sertanejo universitário"]
+      },
+      "affinity_segments": ["latam_youth", "gen_z", "festival_edm"],
+      "rationale": "Brazil is one of the most locally-loyal streaming markets (funk + sertanejo dominate home charts over global pop).",
+      "sources": ["https://www.skoove.com/blog/spotify-local-vs-global-music/", "https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
+      "id": "india_metro",
+      "label": "India (metro north + west)",
+      "level": "country",
+      "country": "IN",
+      "platform_geo": {
+        "meta": {"countries": ["IN"], "cities": ["Mumbai", "Delhi", "Bangalore"]},
+        "google_ads": ["India"],
+        "dv360": ["India"],
+        "tiktok": [],
+        "spotify": ["India"]
+      },
+      "music_bias": {
+        "genre_boosts": ["punjabi pop", "bollywood", "indi-pop", "desi hip hop"],
+        "style_keywords": ["dhol percussion", "filmi strings", "punjabi hook"],
+        "example_artists": ["Diljit Dosanjh", "Arijit Singh", "DIVINE"],
+        "search_modifiers": ["punjabi party", "bollywood anthem"]
+      },
+      "affinity_segments": ["india_youth", "india_family", "gen_z"],
+      "rationale": "India streams overwhelmingly local (film + Punjabi pop); note TikTok is banned in India — planner must drop that platform for this geo.",
+      "sources": ["https://www.skoove.com/blog/spotify-local-vs-global-music/", "https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
+      "id": "korea_japan",
+      "label": "Korea + Japan",
+      "level": "multi-country",
+      "country": "KR/JP",
+      "platform_geo": {
+        "meta": {"countries": ["KR", "JP"], "cities": ["Seoul", "Tokyo"]},
+        "google_ads": ["South Korea", "Japan"],
+        "dv360": ["South Korea", "Japan"],
+        "tiktok": ["Japan"],
+        "spotify": ["South Korea", "Japan"]
+      },
+      "music_bias": {
+        "genre_boosts": ["k-pop", "j-pop", "city pop"],
+        "style_keywords": ["polished vocal stacks", "bright synth funk", "tight choreography energy"],
+        "example_artists": ["NewJeans", "YOASOBI", "IVE"],
+        "search_modifiers": ["k-pop energetic", "city pop groove"]
+      },
+      "affinity_segments": ["east_asia_youth", "gen_z", "pop_stans"],
+      "rationale": "Cross-market study of TW/JP/US shows measurably different preferred audio features (brighter, more produced); local idol pop dominates.",
+      "sources": ["https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8356657/", "https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
+      "id": "nigeria_lagos",
+      "label": "Nigeria + UK diaspora (Lagos-led)",
+      "level": "multi-country",
+      "country": "NG",
+      "platform_geo": {
+        "meta": {"countries": ["NG"], "cities": ["Lagos", "London"]},
+        "google_ads": ["Nigeria", "London, United Kingdom"],
+        "dv360": ["Nigeria", "London"],
+        "tiktok": ["Nigeria", "United Kingdom"],
+        "spotify": ["Nigeria", "United Kingdom"]
+      },
+      "music_bias": {
+        "genre_boosts": ["afrobeats", "amapiano", "alte"],
+        "style_keywords": ["log drum bass", "syncopated percussion", "warm vocal melodies"],
+        "example_artists": ["Burna Boy", "Asake", "Tems"],
+        "search_modifiers": ["afrobeats amapiano"]
+      },
+      "affinity_segments": ["afrobeats_africa", "gen_z", "island_dancehall", "rnb_neosoul"],
+      "rationale": "Afrobeats/amapiano is the fastest-growing regional style globally with a tight Lagos-London diaspora corridor.",
+      "sources": ["https://research.atspotify.com/2024/05/exploring-local-musics-place-in-global-streaming"]
+    },
+    {
+      "id": "mena_gulf",
+      "label": "MENA Gulf (UAE + Saudi)",
+      "level": "multi-country",
+      "country": "AE/SA",
+      "platform_geo": {
+        "meta": {"countries": ["AE", "SA"], "cities": ["Dubai", "Riyadh"]},
+        "google_ads": ["United Arab Emirates", "Saudi Arabia"],
+        "dv360": ["United Arab Emirates", "Saudi Arabia"],
+        "tiktok": ["United Arab Emirates", "Saudi Arabia"],
+        "spotify": ["United Arab Emirates", "Saudi Arabia"]
+      },
+      "music_bias": {
+        "genre_boosts": ["arabic pop", "khaleeji", "arabic hip hop"],
+        "style_keywords": ["maqam melodic runs", "darbuka percussion", "modern trap fusion"],
+        "example_artists": ["Amr Diab", "Wegz", "Balqees"],
+        "search_modifiers": ["arabic pop modern"]
+      },
+      "affinity_segments": ["mena_youth", "gen_z", "luxury_35plus"],
+      "rationale": "High-ARPU ad market; Arabic-language pop/hip-hop over-indexes strongly vs global playlists.",
+      "sources": ["https://www.nature.com/articles/s41599-021-00855-1"]
+    }
+  ]
+}

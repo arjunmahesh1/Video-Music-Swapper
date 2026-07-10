@@ -1,0 +1,209 @@
+{
+  "_meta": {
+    "version": 1,
+    "updated": "2026-07-09",
+    "research_notes": "How one ad becomes many targeted variants inside today's ad stacks. Every platform below already supports (a) multiple creatives under one campaign and (b) audience/geo splits at the ad-set / ad-group / line-item level. None of them generate per-segment creative — that is the Sonic Segments layer. Key empirical shift: Meta's Andromeda ranking engine evaluates orders of magnitude more creative permutations than before, so 'creative is the new targeting' — platforms now REWARD advertisers who bring many audience-tuned variants, which is exactly what we produce.",
+    "sources": [
+      "https://www.admove.ai/blog/meta-advantage-creative-best-practices-for-2026",
+      "https://www.hunchads.com/blog/dynamic-creative-optimization",
+      "https://developers.facebook.com/docs/marketing-api/audiences/reference/basic-targeting/",
+      "https://www.adenslab.com/blog/geo-targeting-local-meta-ads-guide",
+      "https://support.google.com/google-ads/answer/13695777",
+      "https://support.google.com/google-ads/answer/15110871",
+      "https://www.groas.com/post/youtube-ads-demand-gen-2026-complete-guide-formats-strategy-setup",
+      "https://developers.google.com/display-video/api/structured-data-file/format",
+      "https://support.google.com/displayvideo/answer/6301070",
+      "https://ads.tiktok.com/help/article/ad-targeting",
+      "https://ads.tiktok.com/help/article/location-targeting",
+      "https://adshelp.spotify.com/s/article/Targeting-options-US",
+      "https://adshelp.spotify.com/s/article/Interest-targeting-US",
+      "https://ads.spotify.com/en-US/ad-specs/podcast-ad-specs/",
+      "https://www.veuno.com/spotify-ad-specs-your-guide-for-2026/"
+    ]
+  },
+  "platforms": [
+    {
+      "id": "meta",
+      "label": "Meta (Facebook + Instagram)",
+      "channels": ["Facebook Feed", "Facebook Reels", "Instagram Feed", "Instagram Reels", "Instagram Stories"],
+      "variant_mechanism": {
+        "name": "One ad set per audience, one Sonic Segments cut per ad set",
+        "how": "Meta targeting lives on the AD SET. We emit one ad set per (segment x mood x geo) with its matched cut attached as the ad creative. Optionally the cuts can also be pooled into a single Advantage+/flexible ad and let Andromeda pick — but explicit ad sets keep the audience-to-music mapping measurable, which is the product's proof point.",
+        "measurement": "Per-ad-set CTR/CPA compare = direct A/B of music per audience."
+      },
+      "targeting": {
+        "geo_levels": ["country", "region/state", "city (+10-50mi radius)", "zip/postal code", "custom pin radius 1-50mi"],
+        "age": "age_min/age_max (18+ granular)",
+        "gender": "all/male/female",
+        "interests": "Detailed targeting: interest nodes include music genres, artists, festivals, sports teams",
+        "music_specific": "Artist and genre interest nodes (e.g. 'Country music', 'Hip hop music', 'Afrobeats')",
+        "custom_audiences": true,
+        "lookalikes": true
+      },
+      "creative_specs": {
+        "aspect_ratios": ["9:16 (priority — most inventory is vertical mobile)", "1:1", "4:5"],
+        "duration_sec": [1, 240],
+        "container": "MP4 H.264 + AAC",
+        "notes": "15-30s performs best; hook in first 3s"
+      },
+      "delivery": {
+        "api": "Marketing API (Graph API): POST /act_{ad_account_id}/adsets with a targeting spec, /advideos for upload, /adcreatives, /ads",
+        "bulk_format": "JSON payloads (we export ready-to-POST bodies)",
+        "test_mode": "Sandbox ad account (no spend, full API surface) + create everything status=PAUSED in production accounts"
+      },
+      "export_format": "meta/adsets.json",
+      "sources": [
+        "https://developers.facebook.com/docs/marketing-api/audiences/reference/basic-targeting/",
+        "https://www.adenslab.com/blog/geo-targeting-local-meta-ads-guide",
+        "https://www.admove.ai/blog/meta-advantage-creative-best-practices-for-2026",
+        "https://www.hunchads.com/blog/dynamic-creative-optimization"
+      ]
+    },
+    {
+      "id": "google_ads",
+      "label": "Google Ads — Demand Gen + YouTube",
+      "channels": ["YouTube in-stream", "YouTube Shorts", "YouTube in-feed", "Google Discover", "Gmail", "Google Maps"],
+      "variant_mechanism": {
+        "name": "One ad group per audience inside a Demand Gen campaign",
+        "how": "Demand Gen (successor to Video Action campaigns) carries multiple ad groups; each ad group gets its own audience (affinity / custom segment / demographics / geo) and its own Sonic Segments cut. Google's affinity taxonomy includes 150+ segments with explicit MUSIC AFFINITIES (Country Music Fans, Rap & Hip Hop Fans, Electronica & Dance Music Fans...) — we map our demographic segments straight onto them.",
+        "measurement": "Ad-group level CTR/engaged-view compare"
+      },
+      "targeting": {
+        "geo_levels": ["country", "state/region", "DMA (Nielsen metro)", "city", "zip", "radius"],
+        "age": "detailed demographics (18-24, 25-34, 35-44, 45-54, 55-64, 65+)",
+        "gender": "all/male/female/unknown",
+        "interests": "Affinity segments (150+), In-Market, Custom segments (keyword/URL), Life Events",
+        "music_specific": "Music affinity segments per genre; custom segments from artist keywords",
+        "custom_audiences": true,
+        "lookalikes": "Lookalike segments (Demand Gen)"
+      },
+      "creative_specs": {
+        "aspect_ratios": ["16:9", "1:1", "9:16 (Shorts)"],
+        "duration_sec": [6, 180],
+        "container": "Hosted on YouTube (upload as unlisted), referenced by video ID",
+        "notes": ">=10s for in-feed; 6s bumper cutdowns possible from the same render"
+      },
+      "delivery": {
+        "api": "Google Ads API; bulk via Google Ads Editor CSV import",
+        "bulk_format": "CSV (Editor-compatible columns)",
+        "test_mode": "Google Ads test manager accounts (no serving, full API validation); campaigns created PAUSED"
+      },
+      "export_format": "google_ads/demand_gen.csv",
+      "sources": [
+        "https://support.google.com/google-ads/answer/13695777",
+        "https://support.google.com/google-ads/answer/15110871",
+        "https://www.groas.com/post/youtube-ads-demand-gen-2026-complete-guide-formats-strategy-setup",
+        "https://www.mbadv.agency/google-ads/audience-targeting"
+      ]
+    },
+    {
+      "id": "dv360",
+      "label": "Display & Video 360 (programmatic + CTV / YouTube TV)",
+      "channels": ["YouTube (incl. YouTube TV inventory)", "Connected TV apps", "programmatic video exchanges", "audio exchanges"],
+      "variant_mechanism": {
+        "name": "One line item / YouTube ad group per audience via Structured Data Files",
+        "how": "DV360 is the doorway to the living-room vision: YouTube TV and CTV inventory is bought here, and targeting (geo, demo, audience lists, device=ConnectedTV) sits on LINE ITEMS and YouTube AD GROUPS. SDF (CSV bulk format, v9.x) lets us generate the whole trafficking tree offline — one line item per Sonic Segments variant — and the trader uploads it in one click. This is exactly how a Gatorade ad gets a different score in Atlanta living rooms vs Nashville living rooms today, no new ad tech required.",
+        "measurement": "Line-item level completion rate / brand lift"
+      },
+      "targeting": {
+        "geo_levels": ["country", "region", "DMA", "city", "postal code"],
+        "age": "demographic age brackets",
+        "gender": "demographic gender",
+        "interests": "Google audience segments (affinity/in-market) + 1st/3rd-party audience lists",
+        "music_specific": "Music affinity segments; audio-genre contextual on audio inventory",
+        "custom_audiences": true,
+        "device": "ConnectedTV device targeting isolates the TV screen"
+      },
+      "creative_specs": {
+        "aspect_ratios": ["16:9 (CTV)", "9:16/1:1 (mobile video)"],
+        "duration_sec": [6, 120],
+        "container": "MP4 H.264 (CTV: 1080p, 15/30s standard) or YouTube-hosted",
+        "notes": "CTV is non-skippable 15/30s — the full-quality render matters most here"
+      },
+      "delivery": {
+        "api": "Display & Video 360 API + Structured Data Files (SDF v9.x)",
+        "bulk_format": "SDF CSV (LineItem / AdGroup / Ad files)",
+        "test_mode": "SDF validates on upload without activating; line items created Draft/Paused"
+      },
+      "export_format": "dv360/sdf_line_items.csv",
+      "sources": [
+        "https://developers.google.com/display-video/api/structured-data-file/format",
+        "https://support.google.com/displayvideo/answer/6301070",
+        "https://developers.google.com/display-video/api/guides/concepts/structured-data-files/api-integration"
+      ]
+    },
+    {
+      "id": "tiktok",
+      "label": "TikTok Ads",
+      "channels": ["TikTok For You feed", "Pangle network"],
+      "variant_mechanism": {
+        "name": "One ad group per audience",
+        "how": "Targeting lives on the AD GROUP: age, gender, geo (US: state/DMA/city/radius), interests, hashtag-interaction bundles, behaviors. One Sonic Segments cut per ad group; Smart+ can be layered on top but manual ad groups keep the music-per-audience experiment clean.",
+        "measurement": "Ad-group CTR / 6s view-through compare"
+      },
+      "targeting": {
+        "geo_levels": ["country", "state/province", "DMA (US)", "city", "radius (US)"],
+        "age": "13-17 / 18-24 / 25-34 / 35-44 / 45-54 / 55+ brackets",
+        "gender": "all/male/female",
+        "interests": "Interest categories from watch behavior + hashtag interaction bundles",
+        "music_specific": "Music-related interest categories and artist/genre hashtag bundles",
+        "custom_audiences": true,
+        "lookalikes": true
+      },
+      "creative_specs": {
+        "aspect_ratios": ["9:16 only (practically)"],
+        "duration_sec": [5, 60],
+        "container": "MP4/MOV H.264",
+        "notes": "9-15s awareness, 15-30s conversion; value in first 3 seconds. Sound-ON platform — music choice matters more here than anywhere"
+      },
+      "delivery": {
+        "api": "TikTok Marketing API: /adgroup/create/ with targeting object, /ad/create/",
+        "bulk_format": "JSON payloads",
+        "test_mode": "TikTok sandbox ad accounts; operation_status=DISABLE on create"
+      },
+      "export_format": "tiktok/adgroups.json",
+      "sources": [
+        "https://ads.tiktok.com/help/article/ad-targeting",
+        "https://ads.tiktok.com/help/article/location-targeting",
+        "https://improvado.io/blog/tiktok-advertising-guide"
+      ]
+    },
+    {
+      "id": "spotify",
+      "label": "Spotify Ads Manager (audio + podcast)",
+      "channels": ["Music streaming (audio ads)", "Podcast inline (Streaming Ad Insertion)", "Video takeover"],
+      "variant_mechanism": {
+        "name": "One ad set per audience; genre/context targeting is native",
+        "how": "The proof that hyper-targeted audio swaps already ship: Spotify inserts different ads into the SAME podcast stream per listener (Streaming Ad Insertion) — the geo-targeted podcast ads you noticed are this. Targeting: demographics + geo + ONE advanced option per ad set: interest, real-time context (workout/party/chill/commute), MUSIC GENRE currently being streamed, podcast category, or artist fan base. Our angle is unique here: we re-score the ad's music TO the genre the ad set targets — a country fan hears the brand's ad scored country, in a country playlist.",
+        "measurement": "Ad-set level completion rate + Spotify Brand Lift"
+      },
+      "targeting": {
+        "geo_levels": ["country", "region/state", "city/metro", "zip (US)"],
+        "age": "age ranges",
+        "gender": "all/male/female",
+        "interests": "Interest OR real-time context OR genre OR podcast category OR fan base (one per ad set)",
+        "music_specific": "STRONGEST of any platform: target by streamed genre and artist fan bases",
+        "custom_audiences": true,
+        "lookalikes": false
+      },
+      "creative_specs": {
+        "aspect_ratios": ["audio-first (companion image 640x640)"],
+        "duration_sec": [15, 30],
+        "container": "Audio: MP3/WAV, 44.1kHz, target -16 LUFS / -2.0 dBTP; we export an audio-only mix of each cut",
+        "notes": "<=30s in Ads Manager; script <=65 words per 30s. Sonic Segments exports the re-scored AUDIO track of each variant for this channel"
+      },
+      "delivery": {
+        "api": "Spotify Ads Manager (self-serve UI; API in closed beta)",
+        "bulk_format": "JSON brief + audio assets (manual upload today)",
+        "test_mode": "Draft campaigns in Ads Manager; no public sandbox"
+      },
+      "export_format": "spotify/adsets.json",
+      "sources": [
+        "https://adshelp.spotify.com/s/article/Targeting-options-US",
+        "https://adshelp.spotify.com/s/article/Interest-targeting-US",
+        "https://ads.spotify.com/en-US/ad-specs/podcast-ad-specs/",
+        "https://www.veuno.com/spotify-ad-specs-your-guide-for-2026/"
+      ]
+    }
+  ]
+}
