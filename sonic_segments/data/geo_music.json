@@ -388,6 +388,160 @@
       "sources": ["https://research.atspotify.com/2024/05/exploring-local-musics-place-in-global-streaming"]
     },
     {
+      "id": "us_california",
+      "label": "California (statewide)",
+      "level": "region",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"regions": ["California", "Hawaii"], "cities": []},
+        "google_ads": ["California, United States", "Hawaii, United States"],
+        "dv360": ["California", "Hawaii"],
+        "tiktok": ["California", "Hawaii"],
+        "spotify": ["California", "Hawaii"]
+      },
+      "music_bias": {
+        "genre_boosts": ["west coast hip hop", "latin pop", "indie pop", "pop"],
+        "style_keywords": ["sunny hooks", "laid-back groove", "polished pop production"],
+        "example_artists": ["Kendrick Lamar", "Billie Eilish", "Becky G"],
+        "search_modifiers": ["west coast hip hop", "california indie pop"]
+      },
+      "affinity_segments": ["urban_hiphop", "gen_z", "latam_youth", "indie_alt", "pop_stans", "lofi_study"],
+      "rationale": "Kendrick alone is ~10% of California-city streaming; the state splits West-Coast hip-hop, Spanish-language urbano, and coastal indie/pop.",
+      "sources": ["https://bleumag.com/music/american-artists-rule-spotify-charts-at-home-and-abroad/"]
+    },
+    {
+      "id": "us_southwest",
+      "label": "US Southwest (AZ + NM + NV)",
+      "level": "region",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"regions": ["Arizona", "New Mexico", "Nevada"], "cities": []},
+        "google_ads": ["Arizona, United States", "New Mexico, United States", "Nevada, United States"],
+        "dv360": ["Arizona", "New Mexico", "Nevada"],
+        "tiktok": ["Arizona", "New Mexico", "Nevada"],
+        "spotify": ["Arizona", "New Mexico", "Nevada"]
+      },
+      "music_bias": {
+        "genre_boosts": ["regional mexican", "west coast hip hop", "country", "edm"],
+        "style_keywords": ["desert-highway guitars", "requinto accents", "club-ready drops"],
+        "example_artists": ["Peso Pluma", "Kendrick Lamar", "Morgan Wallen"],
+        "search_modifiers": ["musica mexicana", "desert country rock"]
+      },
+      "affinity_segments": ["latam_youth", "country_heartland", "urban_hiphop", "festival_edm"],
+      "rationale": "Border-market regional-mexican loyalty (Phoenix over-indexes West-Coast rap too) plus Vegas EDM; three ownable lanes.",
+      "sources": ["https://bleumag.com/music/american-artists-rule-spotify-charts-at-home-and-abroad/", "https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
+      "id": "us_mountain_west",
+      "label": "Mountain West (CO/UT/ID/MT/WY/AK)",
+      "level": "region",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"regions": ["Colorado", "Utah", "Idaho", "Montana", "Wyoming", "Alaska"], "cities": []},
+        "google_ads": ["Colorado, United States", "Utah, United States", "Idaho, United States", "Montana, United States", "Wyoming, United States", "Alaska, United States"],
+        "dv360": ["Colorado", "Utah", "Idaho", "Montana", "Wyoming", "Alaska"],
+        "tiktok": ["Colorado", "Utah", "Idaho", "Montana", "Wyoming", "Alaska"],
+        "spotify": ["Colorado", "Utah", "Idaho", "Montana", "Wyoming", "Alaska"]
+      },
+      "music_bias": {
+        "genre_boosts": ["indie folk", "country", "edm", "alternative"],
+        "style_keywords": ["big-sky acoustics", "festival drops", "stomp-and-holler energy"],
+        "example_artists": ["Zach Bryan", "ODESZA", "The Lumineers"],
+        "search_modifiers": ["stomp folk anthem", "melodic bass festival"]
+      },
+      "affinity_segments": ["sad_indie_folk", "country_heartland", "festival_edm", "indie_alt", "wellness"],
+      "rationale": "Denver/SLC anchor one of the biggest festival-EDM and indie-folk corridors; rural counties stream country at heartland levels.",
+      "sources": ["https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
+      "id": "us_midwest_great_lakes",
+      "label": "Midwest & Great Lakes",
+      "level": "region",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"regions": ["Ohio", "Michigan", "Indiana", "Illinois", "Wisconsin", "Minnesota", "Iowa", "Missouri", "Kansas", "Nebraska", "North Dakota", "South Dakota"], "cities": []},
+        "google_ads": ["Ohio, United States", "Michigan, United States", "Indiana, United States", "Illinois, United States", "Wisconsin, United States", "Minnesota, United States", "Iowa, United States", "Missouri, United States", "Kansas, United States", "Nebraska, United States", "North Dakota, United States", "South Dakota, United States"],
+        "dv360": ["Ohio", "Michigan", "Indiana", "Illinois", "Wisconsin", "Minnesota", "Iowa", "Missouri", "Kansas", "Nebraska", "North Dakota", "South Dakota"],
+        "tiktok": ["Ohio", "Michigan", "Indiana", "Illinois", "Wisconsin", "Minnesota", "Iowa", "Missouri", "Kansas", "Nebraska", "North Dakota", "South Dakota"],
+        "spotify": ["Ohio", "Michigan", "Indiana", "Illinois", "Wisconsin", "Minnesota"]
+      },
+      "music_bias": {
+        "genre_boosts": ["rock", "country", "hip hop", "pop"],
+        "style_keywords": ["arena-rock guitars", "heartland hooks", "detroit swagger"],
+        "example_artists": ["Eminem", "Zach Bryan", "Jelly Roll"],
+        "search_modifiers": ["heartland rock anthem", "midwest hip hop"]
+      },
+      "affinity_segments": ["country_heartland", "metal_hardrock", "urban_hiphop", "y2k_nostalgia", "gospel_ccm"],
+      "rationale": "Rock/country crossover country's strongest belt; Detroit and Chicago carry distinct hip-hop/house identities inside it (drill down via chicago_dma).",
+      "sources": ["https://bleumag.com/music/american-artists-rule-spotify-charts-at-home-and-abroad/"]
+    },
+    {
+      "id": "us_northeast_corridor",
+      "label": "Northeast Corridor (NY→DC + New England)",
+      "level": "region",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"regions": ["New York", "New Jersey", "Pennsylvania", "Connecticut", "Massachusetts", "Rhode Island", "Vermont", "New Hampshire", "Maine", "Maryland", "Delaware", "District of Columbia"], "cities": []},
+        "google_ads": ["New York, United States", "New Jersey, United States", "Pennsylvania, United States", "Connecticut, United States", "Massachusetts, United States", "Rhode Island, United States", "Vermont, United States", "New Hampshire, United States", "Maine, United States", "Maryland, United States", "Delaware, United States", "District of Columbia, United States"],
+        "dv360": ["New York", "New Jersey", "Pennsylvania", "Connecticut", "Massachusetts", "Rhode Island", "Vermont", "New Hampshire", "Maine", "Maryland", "Delaware", "District of Columbia"],
+        "tiktok": ["New York", "New Jersey", "Pennsylvania", "Connecticut", "Massachusetts", "Rhode Island", "Vermont", "New Hampshire", "Maine", "Maryland", "Delaware", "District of Columbia"],
+        "spotify": ["New York", "New Jersey", "Pennsylvania", "Massachusetts", "Maryland"]
+      },
+      "music_bias": {
+        "genre_boosts": ["east coast hip hop", "drill", "pop", "indie rock", "latin urbano"],
+        "style_keywords": ["boom bap swing", "transit-pace energy", "college-radio indie"],
+        "example_artists": ["Cardi B", "Ice Spice", "SZA"],
+        "search_modifiers": ["east coast hip hop", "ny drill"]
+      },
+      "affinity_segments": ["urban_hiphop", "gen_z", "latam_youth", "indie_alt", "underground_club", "rnb_neosoul"],
+      "rationale": "Densest urban corridor: hip-hop/drill + Latin urbano over-index; drill down to ny_metro for city-level buys.",
+      "sources": ["https://research.atspotify.com/2019/07/environmental-changes-and-the-dynamics-of-musical-identity"]
+    },
+    {
+      "id": "us_southeast_atlantic",
+      "label": "Southeast Atlantic (GA→VA)",
+      "level": "region",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"regions": ["Georgia", "North Carolina", "South Carolina", "Virginia"], "cities": []},
+        "google_ads": ["Georgia, United States", "North Carolina, United States", "South Carolina, United States", "Virginia, United States"],
+        "dv360": ["Georgia", "North Carolina", "South Carolina", "Virginia"],
+        "tiktok": ["Georgia", "North Carolina", "South Carolina", "Virginia"],
+        "spotify": ["Georgia", "North Carolina", "South Carolina", "Virginia"]
+      },
+      "music_bias": {
+        "genre_boosts": ["trap", "southern hip hop", "r&b", "gospel", "country"],
+        "style_keywords": ["heavy 808s", "church-choir stacks", "southern drawl hooks"],
+        "example_artists": ["Future", "J. Cole", "Summer Walker"],
+        "search_modifiers": ["atlanta trap", "southern soul r&b"]
+      },
+      "affinity_segments": ["urban_hiphop", "rnb_neosoul", "gospel_ccm", "country_heartland", "gen_z"],
+      "rationale": "Atlanta's trap gravity plus the Carolinas' R&B/gospel/country blend; drill down to atlanta_dma for metro buys.",
+      "sources": ["https://bleumag.com/music/american-artists-rule-spotify-charts-at-home-and-abroad/"]
+    },
+    {
+      "id": "us_florida",
+      "label": "Florida (statewide)",
+      "level": "region",
+      "country": "US",
+      "platform_geo": {
+        "meta": {"regions": ["Florida"], "cities": []},
+        "google_ads": ["Florida, United States"],
+        "dv360": ["Florida"],
+        "tiktok": ["Florida"],
+        "spotify": ["Florida"]
+      },
+      "music_bias": {
+        "genre_boosts": ["reggaeton", "latin trap", "country", "hip hop"],
+        "style_keywords": ["dembow rhythm", "tropical percussion", "panhandle country twang"],
+        "example_artists": ["Bad Bunny", "Kodak Black", "Morgan Wallen"],
+        "search_modifiers": ["latin urbano", "florida hip hop"]
+      },
+      "affinity_segments": ["latam_youth", "island_dancehall", "urban_hiphop", "country_heartland", "boomers_55plus"],
+      "rationale": "Two states in one: Miami's Spanish-language urbano dominance vs the panhandle's heartland-country profile; drill down to miami_sofla.",
+      "sources": ["https://www.skoove.com/blog/spotify-local-vs-global-music/", "https://www.nature.com/articles/s41599-021-00855-1"]
+    },
+    {
       "id": "mena_gulf",
       "label": "MENA Gulf (UAE + Saudi)",
       "level": "multi-country",

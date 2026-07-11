@@ -33,6 +33,27 @@ SPOTIFY_AUDIO_ARGS = [
 ]
 
 
+def ensure_clean_master(job_dir: Path) -> Path | None:
+    """Voiceover-only master for platform-native sound mode: source video +
+    the separated vocal stem (music bed stripped by the existing separation
+    stack). The platform's precleared library supplies the music at delivery."""
+    job_dir = Path(job_dir)
+    target = job_dir / "master_voiceover_only.mp4"
+    if target.exists():
+        return target
+    source = job_dir / "source.mp4"
+    vocals = job_dir / "stems" / "vocals.wav"
+    if not (source.exists() and vocals.exists()):
+        return None
+    proc = subprocess.run(
+        ["ffmpeg", "-y", "-i", str(source), "-i", str(vocals),
+         "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+         "-shortest", str(target)],
+        capture_output=True, text=True, timeout=600,
+    )
+    return target if proc.returncode == 0 and target.exists() else None
+
+
 def build_rollout_bundle(job_dir: Path, manifest: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
     job_dir = Path(job_dir)
     out = job_dir / "rollout"
@@ -58,6 +79,10 @@ def build_rollout_bundle(job_dir: Path, manifest: dict[str, Any], plan: dict[str
     spotify_audio: list[str] = []
     if "spotify" in by_platform:
         spotify_audio = _write_spotify(out / "spotify", by_platform["spotify"], job_dir)
+
+    sound_units = [u for u in plan["ad_units"] if u.get("sound_brief")]
+    if sound_units:
+        _write_sound_briefs(out / "platform_sound", sound_units)
 
     assets = _copy_assets(out / "assets", plan, job_dir)
 
@@ -217,6 +242,32 @@ def _write_spotify(dir_: Path, units: list[dict[str, Any]], job_dir: Path) -> li
         ],
     }, indent=2))
     return exported
+
+
+def _write_sound_briefs(dir_: Path, units: list[dict[str, Any]]) -> None:
+    """Platform-native sound mode: which precleared library track to attach
+    per ad unit. The video asset is the music-free master; the platform
+    streams the licensed song, so there is nothing to clear or re-render."""
+    dir_.mkdir(parents=True, exist_ok=True)
+    (dir_ / "sound_briefs.json").write_text(json.dumps({
+        "how_it_works": (
+            "Each entry: upload assets/master_voiceover_only.mp4 as the ad video, then attach a "
+            "track from the platform's precleared library matching the filters (TikTok: Creative "
+            "Center -> Commercial Music Library, or post organically + Spark Ads; Meta: Ads Manager "
+            "-> Add music / Advantage+ music optimization). The library track is licensed by the "
+            "platform — no clearance, no baked render, hundreds of variants from one master."
+        ),
+        "briefs": [
+            {
+                "ad_unit": u["name"],
+                "platform": u["platform"],
+                "audience": u["segment_label"],
+                "market": u["geo_label"],
+                **u["sound_brief"],
+            }
+            for u in units
+        ],
+    }, indent=2))
 
 
 def _copy_assets(dir_: Path, plan: dict[str, Any], job_dir: Path) -> list[str]:

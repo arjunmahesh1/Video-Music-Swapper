@@ -1,0 +1,65 @@
+{
+  "_meta": {
+    "version": 1,
+    "updated": "2026-07-10",
+    "research_notes": "Platform-native precleared music: the infrastructure that lets an ad carry a REAL song with zero clearance work, because the platform already licensed it. TikTok's Commercial Music Library (~1M tracks incl. commercial releases; mandatory for business accounts; free for organic posts AND Spark Ads amplifying your own video; filterable by placement/theme/genre/mood/duration in Creative Center). Meta's Sound Collection (14k+ tracks licensed for FB/IG content including ads) plus Meta's licensed-music rollout for Reels ads in Ads Manager / Advantage+ creative, including auto 'music optimization' where Meta picks the track. The Sonic Segments fit: our separation stack already isolates the voiceover, so we ship ONE music-free master + one platform-library sound pick per audience leaf — the platform supplies and streams the licensed song, we supply the intelligence of WHICH song fits WHICH audience. Hard limits encoded below: mainstream licensed catalog (what personal creator accounts hear) is NOT usable in standard paid ads on either platform — the ad-safe paths are exactly CML and Meta's ad-cleared libraries, and library music is placement-restricted (e.g. Meta music currently on Reels/carousel placements).",
+    "sources": [
+      "https://ads.tiktok.com/help/article/commercial-music-library",
+      "https://ads.tiktok.com/help/article/how-to-use-the-commercial-music-library",
+      "https://ads.tiktok.com/business/en-US/blog/audio-library-royalty-free-music",
+      "https://www.tokportal.com/post/us-music-on-tiktok-explained-commercial-library-vs-trending-sounds-and-what-brands-can-safely-use",
+      "https://www.musicbusinessworldwide.com/meta-offers-royalty-free-music-library-to-instagram-reels-advertisers/",
+      "https://www.facebook.com/business/help/759279452000505",
+      "https://tiermusic.com/using-music-in-meta-ads-what-you-need-to-know/",
+      "https://help.instagram.com/402084904469945/"
+    ]
+  },
+  "libraries": [
+    {
+      "id": "tiktok_cml",
+      "platform": "tiktok",
+      "label": "TikTok Commercial Music Library",
+      "catalog": "~1M pre-cleared tracks, including real commercial releases (Anthem/5 Alarm and other licensed catalogs)",
+      "cleared_for": ["organic business posts", "Spark Ads (boosting your own posts)", "auction ads where the sound is marked ad-usable"],
+      "not_cleared": "General/trending sounds (the personal-account catalog) are NOT usable by business accounts or in paid promotion.",
+      "picker_filters": ["placement usability", "theme", "genre", "mood", "duration", "region availability"],
+      "browse": "TikTok Creative Center → Commercial Music Library (publicly browsable; per-track 'usable placements' flags)",
+      "launch_paths": [
+        {
+          "id": "spark_ads",
+          "label": "Spark Ads variant blast",
+          "how": "Post N organic videos from the brand/creator account — same footage (our clean master), each with a different CML sound picked per audience leaf — then create one Spark Ad per post, each ad group targeted to its leaf (geo + age + interest). The sound rides natively; no clearance, no re-render.",
+          "fit": "This is the 'hundreds of the same reel with different sounds' mechanic, entirely inside existing TikTok infrastructure."
+        },
+        {
+          "id": "ads_manager_music",
+          "label": "Ads Manager + commercial sound",
+          "how": "Upload the clean master as ad video and attach a CML track flagged usable for the ad placement."
+        }
+      ]
+    },
+    {
+      "id": "meta_sound_collection",
+      "platform": "meta",
+      "label": "Meta Sound Collection + Reels-ads licensed music",
+      "catalog": "Sound Collection: 14k+ tracks/SFX licensed for Facebook+Instagram content including ads; plus Meta's licensed library for music on Reels ads in Ads Manager",
+      "cleared_for": ["organic Reels/Stories/posts", "Reels ads via Ads Manager music feature / Advantage+ creative (placement-limited rollout)"],
+      "not_cleared": "The mainstream licensed catalog personal accounts use on organic Reels is NOT cleared for standard paid ads; Sound Collection tracks are cleared for FB/IG only (not other platforms).",
+      "picker_filters": ["genre", "mood", "vocals/instrumental", "duration"],
+      "browse": "Meta Business Suite → Sound Collection; Ads Manager Creative Editor → Add music",
+      "launch_paths": [
+        {
+          "id": "reels_ads_music",
+          "label": "Reels ads with library music",
+          "how": "Upload the clean master, attach a library track per ad in Ads Manager (or let Advantage+ 'music optimization' auto-pick); one ad set per audience leaf carries its own track choice.",
+          "fit": "Meta will even auto-select music — our layer replaces 'auto' with an audience-reasoned pick per leaf."
+        },
+        {
+          "id": "partnership_ads",
+          "label": "Partnership (creator) ads",
+          "how": "Creator posts the branded Reel with permitted music, brand boosts via partnership ads; music eligibility follows the sound's ad-usability flag."
+        }
+      ]
+    }
+  ]
+}

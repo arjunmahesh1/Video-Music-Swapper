@@ -18,10 +18,10 @@ from fastapi.templating import Jinja2Templates
 
 load_dotenv()
 
-from ..intelligence import AdPlatformsKB, DemographicsKB, GeoKB, RolloutPlanner
+from ..intelligence import AdPlatformsKB, AudienceTree, BlastPlanner, DemographicsKB, GeoKB, RolloutPlanner
 from ..intelligence.mood import MOODS
 from ..pipeline.campaign import prepare_and_run
-from ..pipeline.export import build_rollout_bundle
+from ..pipeline.export import build_rollout_bundle, ensure_clean_master
 from ..pipeline.jobs import JobStore
 from ..sources import sources_info
 
@@ -124,6 +124,64 @@ def build_rollout(job_id: str, platforms: str = Form(""), geos: str = Form(""), 
         "bundle_url": f"/media/{job_id}/rollout_bundle.zip",
         "brief_url": f"/media/{job_id}/rollout/rollout_plan.md",
         "files": bundle["files"],
+    }
+
+
+@app.get("/api/blast/meta")
+def blast_meta():
+    """The audience tree the blast UI drills through: states (tile map),
+    regions, age bands, taste clusters, intl markets, music modes."""
+    return AudienceTree.default().describe()
+
+
+@app.post("/api/campaigns/{job_id}/blast")
+async def build_blast(job_id: str, request: Request):
+    """Max-reach plan: selection -> leaves -> deduped briefs -> ad units.
+
+    Body (JSON): {us_states, intl, age_bands, tastes, moods, platforms,
+    music_mode, budget}. Same bundle output as /rollout."""
+    job = JobStore.get().get_job(job_id)
+    if job is None:
+        raise HTTPException(404, "Unknown campaign.")
+    manifest_path = job.dir / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(409, "Campaign has no rendered variants yet.")
+    body = await request.json()
+    platforms = body.get("platforms") or []
+    if not platforms:
+        raise HTTPException(400, "Pick at least one platform.")
+    music_mode = body.get("music_mode", "rendered")
+
+    manifest = json.loads(manifest_path.read_text())
+    if music_mode == "platform_sound":
+        master = ensure_clean_master(job.dir)
+        if master is None:
+            raise HTTPException(409, "No music-free master could be built (stems missing for this campaign).")
+
+    try:
+        plan = BlastPlanner().plan(
+            manifest,
+            selection={k: body.get(k) or [] for k in ("us_states", "intl", "age_bands", "tastes", "moods")},
+            platform_ids=platforms,
+            music_mode=music_mode,
+            total_budget=float(body.get("budget") or 5000.0),
+        )
+        bundle = build_rollout_bundle(job.dir, manifest, plan)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {
+        "summary": plan["summary"],
+        "issues": plan["issues"],
+        "skipped": plan["skipped"][:20],
+        "ad_units": [
+            {k: u.get(k) for k in ("name", "platform", "platform_label", "variant_label",
+                                   "segment_label", "geo_label", "budget", "leaf_count",
+                                   "addressable_pop_m", "why", "sound_brief")}
+            for u in plan["ad_units"][:60]
+        ],
+        "ad_units_total": len(plan["ad_units"]),
+        "bundle_url": f"/media/{job_id}/rollout_bundle.zip",
+        "brief_url": f"/media/{job_id}/rollout/rollout_plan.md",
     }
 
 

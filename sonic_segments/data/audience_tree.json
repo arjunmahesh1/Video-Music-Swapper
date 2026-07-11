@@ -1,0 +1,593 @@
+{
+  "_meta": {
+    "version": 1,
+    "updated": "2026-07-10",
+    "research_notes": "Funnel order mirrors how media planners actually filter: (1) GEO first \u2014 budgets are prioritized by market (state/DMA) before anything else, because location decides where investment concentrates and DMAs are the historical unit of media buying; (2) DEMOGRAPHIC second \u2014 age (x gender/language) splits within each market, matching the platform layer where targeting lives (Meta/TikTok ad sets, Google ad groups); (3) TASTE third \u2014 music/interest affinity is the leaf, the psychographic layer platforms expose as interest/affinity/genre targeting. Every impression lands in exactly one leaf = (market x age band x taste cluster), and every leaf gets a scored music brief \u2014 geo pack re-flavors the taste cluster's direction, so a hip-hop 18-24 leaf sounds like trap in Atlanta and drill in New York. COMPLIANCE: race/ethnicity is NOT a targetable attribute on any major platform; the compliant proxies this tree uses are age, geography, language-market, and music-culture affinity. State populations are approximate 2020 US Census figures (millions); age-band total_pop_share values approximate the US age structure (18-65 is ~77% of total population), so addressable-population estimates are people-honest. Used only for budget/reach weighting.",
+    "sources": [
+      "https://tinuiti.com/blog/ecommerce/geotargeting/",
+      "https://journalism.university/advertising-and-public-relations/step-by-step-guide-effective-media-plans/",
+      "https://lwdirect.com/news/how-to-use-audience-segmentation-for-targeted-tv-campaigns/",
+      "https://www.adstellar.ai/blog/guide-to-meta-ads-campaign-structure",
+      "https://telmarhelixa.com/resources/audience-segmentation",
+      "https://www.census.gov/library/stories/state-by-state.html"
+    ]
+  },
+  "funnel": [
+    {
+      "level": "geo",
+      "label": "Market",
+      "why": "Media buys are prioritized by market first (state/DMA); geography decides budget concentration and is the coarsest platform targeting unit."
+    },
+    {
+      "level": "age",
+      "label": "Demographic",
+      "why": "Age bands are the universal demographic split every platform targets natively; gender/language layer on top where policy allows."
+    },
+    {
+      "level": "taste",
+      "label": "Taste cluster",
+      "why": "The leaf: music-culture affinity, expressed on-platform as interest/affinity/genre targeting. This is where the score is personalized."
+    }
+  ],
+  "age_bands": [
+    {
+      "id": "18_24",
+      "label": "18\u201324",
+      "range": [
+        18,
+        24
+      ],
+      "total_pop_share": 0.115
+    },
+    {
+      "id": "25_34",
+      "label": "25\u201334",
+      "range": [
+        25,
+        34
+      ],
+      "total_pop_share": 0.177
+    },
+    {
+      "id": "35_44",
+      "label": "35\u201344",
+      "range": [
+        35,
+        44
+      ],
+      "total_pop_share": 0.162
+    },
+    {
+      "id": "45_54",
+      "label": "45\u201354",
+      "range": [
+        45,
+        54
+      ],
+      "total_pop_share": 0.146
+    },
+    {
+      "id": "55_65",
+      "label": "55\u201365",
+      "range": [
+        55,
+        65
+      ],
+      "total_pop_share": 0.169
+    }
+  ],
+  "taste_clusters": [
+    "urban_hiphop",
+    "country_heartland",
+    "latam_youth",
+    "pop_stans",
+    "indie_alt",
+    "rnb_neosoul",
+    "festival_edm",
+    "underground_club",
+    "metal_hardrock",
+    "pop_punk_emo",
+    "sad_indie_folk",
+    "conscious_hiphop",
+    "lofi_study",
+    "film_score_heads",
+    "island_dancehall",
+    "gospel_ccm",
+    "y2k_nostalgia",
+    "afrobeats_africa"
+  ],
+  "us_states": {
+    "AL": {
+      "name": "Alabama",
+      "region": "us_south_heartland",
+      "pop_m": 5.0,
+      "tile": [
+        7,
+        6
+      ]
+    },
+    "AK": {
+      "name": "Alaska",
+      "region": "us_mountain_west",
+      "pop_m": 0.7,
+      "tile": [
+        0,
+        0
+      ]
+    },
+    "AZ": {
+      "name": "Arizona",
+      "region": "us_southwest",
+      "pop_m": 7.2,
+      "tile": [
+        2,
+        5
+      ]
+    },
+    "AR": {
+      "name": "Arkansas",
+      "region": "us_south_heartland",
+      "pop_m": 3.0,
+      "tile": [
+        5,
+        5
+      ]
+    },
+    "CA": {
+      "name": "California",
+      "region": "us_california",
+      "pop_m": 39.5,
+      "tile": [
+        1,
+        4
+      ]
+    },
+    "CO": {
+      "name": "Colorado",
+      "region": "us_mountain_west",
+      "pop_m": 5.8,
+      "tile": [
+        3,
+        4
+      ]
+    },
+    "CT": {
+      "name": "Connecticut",
+      "region": "us_northeast_corridor",
+      "pop_m": 3.6,
+      "tile": [
+        10,
+        3
+      ]
+    },
+    "DE": {
+      "name": "Delaware",
+      "region": "us_northeast_corridor",
+      "pop_m": 1.0,
+      "tile": [
+        10,
+        4
+      ]
+    },
+    "DC": {
+      "name": "District of Columbia",
+      "region": "us_northeast_corridor",
+      "pop_m": 0.7,
+      "tile": [
+        9,
+        5
+      ]
+    },
+    "FL": {
+      "name": "Florida",
+      "region": "us_florida",
+      "pop_m": 21.5,
+      "tile": [
+        9,
+        7
+      ]
+    },
+    "GA": {
+      "name": "Georgia",
+      "region": "us_southeast_atlantic",
+      "pop_m": 10.7,
+      "tile": [
+        8,
+        6
+      ]
+    },
+    "HI": {
+      "name": "Hawaii",
+      "region": "us_california",
+      "pop_m": 1.5,
+      "tile": [
+        0,
+        7
+      ]
+    },
+    "ID": {
+      "name": "Idaho",
+      "region": "us_mountain_west",
+      "pop_m": 1.8,
+      "tile": [
+        2,
+        2
+      ]
+    },
+    "IL": {
+      "name": "Illinois",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 12.8,
+      "tile": [
+        6,
+        2
+      ]
+    },
+    "IN": {
+      "name": "Indiana",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 6.8,
+      "tile": [
+        6,
+        3
+      ]
+    },
+    "IA": {
+      "name": "Iowa",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 3.2,
+      "tile": [
+        5,
+        3
+      ]
+    },
+    "KS": {
+      "name": "Kansas",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 2.9,
+      "tile": [
+        4,
+        5
+      ]
+    },
+    "KY": {
+      "name": "Kentucky",
+      "region": "us_south_heartland",
+      "pop_m": 4.5,
+      "tile": [
+        6,
+        4
+      ]
+    },
+    "LA": {
+      "name": "Louisiana",
+      "region": "us_south_heartland",
+      "pop_m": 4.7,
+      "tile": [
+        5,
+        6
+      ]
+    },
+    "ME": {
+      "name": "Maine",
+      "region": "us_northeast_corridor",
+      "pop_m": 1.4,
+      "tile": [
+        11,
+        0
+      ]
+    },
+    "MD": {
+      "name": "Maryland",
+      "region": "us_northeast_corridor",
+      "pop_m": 6.2,
+      "tile": [
+        9,
+        4
+      ]
+    },
+    "MA": {
+      "name": "Massachusetts",
+      "region": "us_northeast_corridor",
+      "pop_m": 7.0,
+      "tile": [
+        10,
+        2
+      ]
+    },
+    "MI": {
+      "name": "Michigan",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 10.1,
+      "tile": [
+        7,
+        2
+      ]
+    },
+    "MN": {
+      "name": "Minnesota",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 5.7,
+      "tile": [
+        5,
+        2
+      ]
+    },
+    "MS": {
+      "name": "Mississippi",
+      "region": "us_south_heartland",
+      "pop_m": 3.0,
+      "tile": [
+        6,
+        6
+      ]
+    },
+    "MO": {
+      "name": "Missouri",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 6.2,
+      "tile": [
+        5,
+        4
+      ]
+    },
+    "MT": {
+      "name": "Montana",
+      "region": "us_mountain_west",
+      "pop_m": 1.1,
+      "tile": [
+        3,
+        2
+      ]
+    },
+    "NE": {
+      "name": "Nebraska",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 2.0,
+      "tile": [
+        4,
+        4
+      ]
+    },
+    "NV": {
+      "name": "Nevada",
+      "region": "us_southwest",
+      "pop_m": 3.1,
+      "tile": [
+        2,
+        3
+      ]
+    },
+    "NH": {
+      "name": "New Hampshire",
+      "region": "us_northeast_corridor",
+      "pop_m": 1.4,
+      "tile": [
+        11,
+        1
+      ]
+    },
+    "NJ": {
+      "name": "New Jersey",
+      "region": "us_northeast_corridor",
+      "pop_m": 9.3,
+      "tile": [
+        9,
+        3
+      ]
+    },
+    "NM": {
+      "name": "New Mexico",
+      "region": "us_southwest",
+      "pop_m": 2.1,
+      "tile": [
+        3,
+        5
+      ]
+    },
+    "NY": {
+      "name": "New York",
+      "region": "us_northeast_corridor",
+      "pop_m": 20.2,
+      "tile": [
+        9,
+        2
+      ]
+    },
+    "NC": {
+      "name": "North Carolina",
+      "region": "us_southeast_atlantic",
+      "pop_m": 10.4,
+      "tile": [
+        7,
+        5
+      ]
+    },
+    "ND": {
+      "name": "North Dakota",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 0.8,
+      "tile": [
+        4,
+        2
+      ]
+    },
+    "OH": {
+      "name": "Ohio",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 11.8,
+      "tile": [
+        7,
+        3
+      ]
+    },
+    "OK": {
+      "name": "Oklahoma",
+      "region": "us_south_heartland",
+      "pop_m": 4.0,
+      "tile": [
+        4,
+        6
+      ]
+    },
+    "OR": {
+      "name": "Oregon",
+      "region": "pacific_northwest",
+      "pop_m": 4.2,
+      "tile": [
+        1,
+        3
+      ]
+    },
+    "PA": {
+      "name": "Pennsylvania",
+      "region": "us_northeast_corridor",
+      "pop_m": 13.0,
+      "tile": [
+        8,
+        3
+      ]
+    },
+    "RI": {
+      "name": "Rhode Island",
+      "region": "us_northeast_corridor",
+      "pop_m": 1.1,
+      "tile": [
+        11,
+        2
+      ]
+    },
+    "SC": {
+      "name": "South Carolina",
+      "region": "us_southeast_atlantic",
+      "pop_m": 5.1,
+      "tile": [
+        8,
+        5
+      ]
+    },
+    "SD": {
+      "name": "South Dakota",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 0.9,
+      "tile": [
+        4,
+        3
+      ]
+    },
+    "TN": {
+      "name": "Tennessee",
+      "region": "us_south_heartland",
+      "pop_m": 6.9,
+      "tile": [
+        6,
+        5
+      ]
+    },
+    "TX": {
+      "name": "Texas",
+      "region": "texas_triangle",
+      "pop_m": 29.1,
+      "tile": [
+        4,
+        7
+      ]
+    },
+    "UT": {
+      "name": "Utah",
+      "region": "us_mountain_west",
+      "pop_m": 3.3,
+      "tile": [
+        2,
+        4
+      ]
+    },
+    "VT": {
+      "name": "Vermont",
+      "region": "us_northeast_corridor",
+      "pop_m": 0.6,
+      "tile": [
+        10,
+        1
+      ]
+    },
+    "VA": {
+      "name": "Virginia",
+      "region": "us_southeast_atlantic",
+      "pop_m": 8.6,
+      "tile": [
+        8,
+        4
+      ]
+    },
+    "WA": {
+      "name": "Washington",
+      "region": "pacific_northwest",
+      "pop_m": 7.7,
+      "tile": [
+        1,
+        2
+      ]
+    },
+    "WV": {
+      "name": "West Virginia",
+      "region": "us_south_heartland",
+      "pop_m": 1.8,
+      "tile": [
+        7,
+        4
+      ]
+    },
+    "WI": {
+      "name": "Wisconsin",
+      "region": "us_midwest_great_lakes",
+      "pop_m": 5.9,
+      "tile": [
+        5,
+        1
+      ]
+    },
+    "WY": {
+      "name": "Wyoming",
+      "region": "us_mountain_west",
+      "pop_m": 0.6,
+      "tile": [
+        3,
+        3
+      ]
+    }
+  },
+  "dma_drilldown": {
+    "GA": [
+      "atlanta_dma"
+    ],
+    "TN": [
+      "nashville_dma"
+    ],
+    "FL": [
+      "miami_sofla"
+    ],
+    "CA": [
+      "la_metro"
+    ],
+    "NY": [
+      "ny_metro"
+    ],
+    "IL": [
+      "chicago_dma"
+    ],
+    "TX": [
+      "texas_triangle"
+    ]
+  },
+  "intl_markets": [
+    "uk_london",
+    "germany_berlin",
+    "mexico",
+    "brazil",
+    "india_metro",
+    "korea_japan",
+    "nigeria_lagos",
+    "mena_gulf"
+  ]
+}

@@ -57,6 +57,26 @@ commit message. (The render-quality benchmark is separate:
 4. Spot-check bundle quality: `rollout/spotify/audio/*.mp3` should measure
    ≈ -16 LUFS / 44.1kHz stereo (`ffmpeg -af loudnorm=print_format=json`).
 
+### Tier 3b — blast planner (max reach)
+
+The preview page's **Blast** section drives the full media-planning funnel
+(Market → Demographic → Taste): pick states on the tile map (or whole sonic
+regions / entire US), age bands, taste clusters, and a music mode:
+
+- **Rendered cuts**: every unique brief maps to the closest rendered cut.
+- **Platform-native sound**: builds `master_voiceover_only.mp4` (source video
+  + the separated vocal stem — music bed stripped) and emits one precleared
+  library pick per audience leaf (TikTok Commercial Music Library / Meta
+  Sound Collection). Real songs, zero clearance, no re-render; see
+  `rollout/platform_sound/sound_briefs.json` in the bundle and
+  `data/platform_music.json` for the cited infrastructure. TikTok launch is
+  the Spark Ads mechanic: N organic posts of the same master, each with a
+  different CML sound, each boosted to its own leaf audience.
+
+Scale check (benchmarked): full US × 18 tastes × 5 age bands = 5,310 leaves
+→ 324 unique briefs → thousands of paused ad units, planned in <0.2s,
+addressable population deduped to people (~255M US 18–65).
+
 ## 2. Deployment mechanism per platform
 
 The bundle maps 1:1 onto each platform's existing bulk/variant machinery —

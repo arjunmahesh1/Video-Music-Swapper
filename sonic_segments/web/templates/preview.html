@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=8">
+<link rel="stylesheet" href="/static/style.css?v=9">
 </head>
 <body>
 <header class="site fixed">
@@ -126,6 +126,73 @@
     </div>
   </div>
 
+  <div class="card" id="blastCard">
+    <h2>Blast — max reach, every leaf scored</h2>
+    <p class="kv" style="margin-bottom:4px">
+      The full media-planning funnel: <b>Market → Demographic → Taste</b>. Every impression lands in
+      exactly one leaf (market ✕ age ✕ taste cluster) and every leaf gets a music brief tuned to what
+      that exact audience streams. Thousands of leaves deduplicate into a handful of unique briefs —
+      that's what makes the blast affordable.
+    </p>
+    <p class="kv">Compliance note: platforms don't allow race/ethnicity targeting — leaves use age,
+      geography, language-market and music affinity only.</p>
+
+    <div class="funnel-step">1 · Markets <small>— click states, or toggle whole sonic regions below the map</small></div>
+    <div class="tile-map" id="tileMap"></div>
+    <div class="map-legend" id="mapLegend"></div>
+    <div class="chips" id="intlChips" style="margin-top:10px"></div>
+    <div class="dl-row" style="margin-top:10px">
+      <button class="btn secondary" type="button" id="allUsBtn" style="padding:8px 18px;font-size:13px">Select entire US</button>
+      <button class="btn secondary" type="button" id="clearMarketsBtn" style="padding:8px 18px;font-size:13px">Clear</button>
+    </div>
+
+    <div class="funnel-step">2 · Demographic <small>— age bands (all selected = full 18–65 coverage)</small></div>
+    <div class="chips" id="bandChips"></div>
+
+    <div class="funnel-step">3 · Taste leaves <small>— empty = all clusters; every person maps to one</small></div>
+    <div class="chips" id="tasteChips"></div>
+
+    <div class="funnel-step">4 · Music source</div>
+    <div class="mode-grid">
+      <div class="mode-card active" data-bmode="rendered" id="bmodeRendered">
+        <h3>Rendered cuts <span class="badge legal">THIS CAMPAIGN</span></h3>
+        <p>Each audience brief maps to the <b>closest re-scored cut</b> already rendered above.</p>
+      </div>
+      <div class="mode-card" data-bmode="platform_sound" id="bmodeSound">
+        <h3>Platform-native sound <span class="badge legal">REAL SONGS · PRECLEARED</span></h3>
+        <p>One <b>music-free master</b> (your voiceover, bed stripped) + a precleared library pick per
+           leaf — TikTok Commercial Music Library / Meta Sound Collection. The platform streams the
+           licensed song; nothing to clear, nothing to re-render. TikTok + Meta only.</p>
+      </div>
+    </div>
+
+    <div class="funnel-step">5 · Platforms & budget</div>
+    <div class="chips" id="blastPlatformChips"></div>
+    <div class="row" style="margin-top:14px;align-items:end">
+      <div>
+        <label class="fld">Total test budget (USD)</label>
+        <input type="text" id="blastBudget" value="5000" inputmode="decimal">
+      </div>
+      <div>
+        <button class="btn" id="blastBtn" type="button">Blast the plan →</button>
+      </div>
+    </div>
+
+    <div class="meta-grid" id="blastEstimate" style="margin-top:16px"></div>
+    <div class="err" id="blastErr"></div>
+
+    <div id="blastResult" style="display:none">
+      <div class="meta-grid" id="blastStats"></div>
+      <div id="blastIssues"></div>
+      <div id="blastUnits"></div>
+      <p class="kv" id="blastMore" style="margin-top:10px"></p>
+      <div class="dl-row" style="margin-top:16px">
+        <a class="btn" id="blastBundleLink" href="#" download>Download trafficking bundle (.zip)</a>
+        <a class="btn secondary" id="blastBriefLink" href="#" target="_blank">Read the brief</a>
+      </div>
+    </div>
+  </div>
+
   <footer class="site">Re-scored by Sonic Segments. Demo-only cuts carry an audible watermark and are not licensed for delivery.</footer>
 </div>
 
@@ -231,6 +298,203 @@ function renderRollout(data) {
   document.getElementById("briefLink").href = data.brief_url;
   document.getElementById("rolloutResult").style.display = "block";
   document.getElementById("rolloutResult").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* ---- blast planner: Market -> Demographic -> Taste ---- */
+const REGION_COLORS = ["#0d9488", "#7c3aed", "#d97706", "#dc2626", "#2563eb",
+                       "#059669", "#c026d3", "#b45309", "#4f46e5", "#0891b2"];
+const blast = {
+  tree: null, states: new Set(), intl: new Set(),
+  bands: new Set(), tastes: new Set(), mode: "rendered",
+  platforms: new Set(["tiktok", "meta"]),
+  regionColor: {},
+};
+
+fetch("/api/blast/meta").then(r => r.json()).then(tree => {
+  blast.tree = tree;
+  tree.regions.forEach((r, i) => (blast.regionColor[r.id] = REGION_COLORS[i % REGION_COLORS.length]));
+  buildTileMap(tree);
+  buildLegend(tree);
+  const intlBox = document.getElementById("intlChips");
+  tree.intl_markets.forEach(m =>
+    chip(intlBox, m.label, m.genres.join(", "), blast.intl, m.id, false));
+  const bandBox = document.getElementById("bandChips");
+  tree.age_bands.forEach(b =>
+    chip2(bandBox, b.label, `~${Math.round(b.total_pop_share * 100)}% of population`, blast.bands, b.id, true));
+  const tasteBox = document.getElementById("tasteChips");
+  tree.taste_clusters.forEach(t =>
+    chip2(tasteBox, t.label, t.genres.join(", "), blast.tastes, t.id, false));
+  const pBox = document.getElementById("blastPlatformChips");
+  ["tiktok", "meta", "google_ads", "dv360", "spotify"].forEach(pid =>
+    chip2(pBox, pid.replace("_", " "), "", blast.platforms, pid, blast.platforms.has(pid)));
+  updateEstimate();
+}).catch(() => {});
+
+function chip2(box, label, title, set, id, active) {
+  const el = document.createElement("div");
+  el.className = "chip" + (active ? " active" : "");
+  el.textContent = label;
+  if (title) el.title = title;
+  if (active) set.add(id);
+  el.onclick = () => {
+    set.has(id) ? set.delete(id) : set.add(id);
+    el.classList.toggle("active", set.has(id));
+    updateEstimate();
+  };
+  box.appendChild(el);
+}
+
+function buildTileMap(tree) {
+  const map = document.getElementById("tileMap");
+  const byPos = {};
+  Object.entries(tree.us_states).forEach(([code, st]) => (byPos[st.tile[0] + "," + st.tile[1]] = code));
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 12; col++) {
+      const code = byPos[col + "," + row];
+      const el = document.createElement("div");
+      if (!code) { el.className = "tile blank"; map.appendChild(el); continue; }
+      const st = tree.us_states[code];
+      el.className = "tile"; el.textContent = code; el.dataset.code = code;
+      el.title = `${st.name} — ${st.pop_m}M — ${regionLabel(st.region)}`;
+      el.onclick = () => { toggleState(code); updateEstimate(); };
+      map.appendChild(el);
+    }
+  }
+}
+
+function regionLabel(rid) {
+  const r = blast.tree.regions.find(x => x.id === rid);
+  return r ? r.label : rid;
+}
+
+function toggleState(code, force) {
+  const on = force !== undefined ? force : !blast.states.has(code);
+  on ? blast.states.add(code) : blast.states.delete(code);
+  const el = document.querySelector(`.tile[data-code="${code}"]`);
+  if (el) {
+    el.classList.toggle("on", on);
+    el.style.background = on ? blast.regionColor[blast.tree.us_states[code].region] : "";
+  }
+}
+
+function buildLegend(tree) {
+  const box = document.getElementById("mapLegend");
+  tree.regions.forEach(r => {
+    const el = document.createElement("div");
+    el.className = "legend-chip";
+    el.innerHTML = `<span class="dot" style="background:${blast.regionColor[r.id]}"></span>
+      ${r.label} · ${r.pop_m}M · ${r.genres.join(", ")}`;
+    el.onclick = () => {
+      const allOn = r.states.every(s => blast.states.has(s));
+      r.states.forEach(s => toggleState(s, !allOn));
+      updateEstimate();
+    };
+    box.appendChild(el);
+  });
+}
+
+document.getElementById("allUsBtn").onclick = () => {
+  Object.keys(blast.tree.us_states).forEach(s => toggleState(s, true));
+  updateEstimate();
+};
+document.getElementById("clearMarketsBtn").onclick = () => {
+  Object.keys(blast.tree.us_states).forEach(s => toggleState(s, false));
+  blast.intl.clear();
+  document.querySelectorAll("#intlChips .chip").forEach(c => c.classList.remove("active"));
+  updateEstimate();
+};
+
+["bmodeRendered", "bmodeSound"].forEach(id => {
+  document.getElementById(id).onclick = () => {
+    blast.mode = document.getElementById(id).dataset.bmode;
+    document.getElementById("bmodeRendered").classList.toggle("active", blast.mode === "rendered");
+    document.getElementById("bmodeSound").classList.toggle("active", blast.mode === "platform_sound");
+    updateEstimate();
+  };
+});
+
+function updateEstimate() {
+  if (!blast.tree) return;
+  const t = blast.tree;
+  const nStates = blast.states.size, nIntl = blast.intl.size;
+  const nBands = blast.bands.size || t.age_bands.length;
+  const nTastes = blast.tastes.size || t.taste_clusters.length;
+  const moods = new Set(manifest.variants.map(v => v.mood));
+  const leaves = (nStates + nIntl) * nBands * nTastes * moods.size;
+  const regions = new Set([...blast.states].map(s => t.us_states[s].region));
+  const briefs = (regions.size + nIntl) * nTastes * moods.size;
+  let pop = 0;
+  const shareSum = (blast.bands.size ? t.age_bands.filter(b => blast.bands.has(b.id)) : t.age_bands)
+    .reduce((a, b) => a + b.total_pop_share, 0);
+  blast.states.forEach(s => (pop += t.us_states[s].pop_m * shareSum));
+  const nPlat = blast.mode === "platform_sound"
+    ? [...blast.platforms].filter(p => ["tiktok", "meta"].includes(p)).length
+    : blast.platforms.size;
+  document.getElementById("blastEstimate").innerHTML = `
+    <div class="meta-box"><span>Leaves</span><b>${leaves.toLocaleString()}</b></div>
+    <div class="meta-box"><span>Unique briefs</span><b>~${briefs.toLocaleString()}</b></div>
+    <div class="meta-box"><span>Ad units</span><b>~${(briefs * nBands * Math.max(nPlat, 1)).toLocaleString()}</b></div>
+    <div class="meta-box"><span>Addressable (US)</span><b>${pop.toFixed(0)}M</b></div>`;
+}
+
+document.getElementById("blastBtn").onclick = async () => {
+  const btn = document.getElementById("blastBtn"), err = document.getElementById("blastErr");
+  err.textContent = "";
+  if (!blast.states.size && !blast.intl.size) return (err.textContent = "Pick at least one market (step 1).");
+  if (!blast.platforms.size) return (err.textContent = "Pick at least one platform (step 5).");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Blasting…';
+  try {
+    const resp = await fetch(`/api/campaigns/${manifest.id}/blast`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        us_states: [...blast.states], intl: [...blast.intl],
+        age_bands: [...blast.bands], tastes: [...blast.tastes],
+        moods: [...new Set(manifest.variants.map(v => v.mood))],
+        platforms: [...blast.platforms], music_mode: blast.mode,
+        budget: parseFloat(document.getElementById("blastBudget").value) || 5000,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || "Blast failed.");
+    renderBlast(data);
+  } catch (ex) {
+    err.textContent = ex.message;
+  }
+  btn.disabled = false;
+  btn.textContent = "Re-blast the plan →";
+};
+
+function renderBlast(data) {
+  const s = data.summary;
+  document.getElementById("blastStats").innerHTML = `
+    <div class="meta-box"><span>Leaves</span><b>${s.leaves.toLocaleString()}</b></div>
+    <div class="meta-box"><span>Unique briefs</span><b>${s.unique_briefs}</b></div>
+    <div class="meta-box"><span>Ad units</span><b>${s.ad_units.toLocaleString()}</b></div>
+    <div class="meta-box"><span>Markets</span><b>${s.geos}</b></div>
+    <div class="meta-box"><span>Addressable</span><b>${s.addressable_pop_m}M</b></div>`;
+  document.getElementById("blastIssues").innerHTML = (data.issues || [])
+    .slice(0, 8).map(i => `<div class="warn-line">⚠ ${i}</div>`).join("");
+  document.getElementById("blastUnits").innerHTML = data.ad_units.slice(0, 12).map(u => `
+    <div class="variant-detail">
+      <b style="font-size:14px">${u.name}</b>
+      <span class="badge legal" style="margin-left:8px">${u.platform_label}</span>
+      <p class="kv" style="margin-top:4px">
+        ${u.segment_label} · <b>${u.geo_label}</b> · ${u.leaf_count} leaf market(s)
+        · ~${u.addressable_pop_m}M people · $${u.budget.toFixed(2)}
+      </p>
+      ${u.sound_brief ? `<p class="kv" style="margin-top:4px">🎵 ${u.sound_brief.library}:
+        ${u.sound_brief.filters.genre.join(" / ")} · ${u.sound_brief.filters.mood}
+        · ${u.sound_brief.filters.tempo_bpm[0]}–${u.sound_brief.filters.tempo_bpm[1]} BPM
+        → ${u.sound_brief.launch_path}</p>` : ""}
+    </div>`).join("");
+  document.getElementById("blastMore").textContent =
+    data.ad_units_total > 12 ? `…and ${(data.ad_units_total - 12).toLocaleString()} more ad units in the bundle.` : "";
+  document.getElementById("blastBundleLink").href = data.bundle_url;
+  document.getElementById("blastBriefLink").href = data.brief_url;
+  document.getElementById("blastResult").style.display = "block";
+  document.getElementById("blastResult").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 </script>
 </body>

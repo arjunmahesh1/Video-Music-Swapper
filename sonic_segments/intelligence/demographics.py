@@ -88,14 +88,26 @@ class DemographicsKB:
             raise KeyError(f"Unknown demographic segment: {segment_id}")
         return self.segments[segment_id]
 
-    def direction(self, segment_id: str, mood: str, geo: dict[str, Any] | None = None) -> MusicDirection:
+    def direction(
+        self,
+        segment_id: str,
+        mood: str,
+        geo: dict[str, Any] | None = None,
+        geo_weight: str = "lead",
+    ) -> MusicDirection:
         """Merge a segment's preferences with the requested mood.
 
         An optional geo pack (from GeoKB, data/geo_music.json) tunes the brief
         to what that market actually streams: its genres lead, its search
         modifiers and style keywords flavor the sourcing prompt. This is the
         hyperpersonalization step — Gen-Z x hype is a different brief in
-        Atlanta (trap) than in Nashville (country-adjacent)."""
+        Atlanta (trap) than in Nashville (country-adjacent).
+
+        geo_weight: "lead" puts the market's genres first (right for broad
+        demographic segments that are genre-fluid); "flavor" keeps the
+        segment's genres first and lets the market color the edges (right for
+        taste clusters, where genre IS the audience identity — a hip-hop leaf
+        in the heartland stays hip-hop, with southern flavor)."""
         segment = self.get(segment_id)
         if mood not in MOODS:
             raise KeyError(f"Unknown mood: {mood}")
@@ -132,10 +144,13 @@ class DemographicsKB:
         if geo:
             bias = geo.get("music_bias", {})
             boosts = bias.get("genre_boosts", [])
-            # Market genres lead the brief; segment genres keep it on-audience.
-            genres = list(dict.fromkeys(boosts[:2] + genres))[:5]
             mods = bias.get("search_modifiers", [])
-            search_terms = [f"{adjectives[0]} {m}" for m in mods[:2]] + search_terms
+            if geo_weight == "flavor":
+                genres = list(dict.fromkeys(genres + boosts[:2]))[:5]
+                search_terms = search_terms + [f"{adjectives[0]} {m}" for m in mods[:1]]
+            else:  # market genres lead; segment genres keep it on-audience
+                genres = list(dict.fromkeys(boosts[:2] + genres))[:5]
+                search_terms = [f"{adjectives[0]} {m}" for m in mods[:2]] + search_terms
             geo_kw = bias.get("style_keywords", [])
             if geo_kw:
                 prompt += f", with {geo_kw[0]}"

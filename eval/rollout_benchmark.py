@@ -91,6 +91,27 @@ def main() -> None:
             dirty_plans.append(f"{seg_id}/{mood}: {plan['issues'][:2]}")
     elapsed = time.time() - t0
 
+    # ---- 4. blast sweep: full US x all tastes x both music modes -----------
+    from sonic_segments.intelligence.audience_tree import AudienceTree, BlastPlanner
+
+    tree = AudienceTree.default()
+    blast = BlastPlanner(tree)
+    blast_manifest = {
+        "id": "benchmark", "brand": "BENCH", "duration": 30,
+        "variants": [_fake_variant("gen_z", "Gen-Z (16-24)", "hype")],
+    }
+    full_us = {"us_states": list(tree.us_states), "intl": tree.intl_markets,
+               "age_bands": [], "tastes": [], "moods": ["hype"]}
+    t1 = time.time()
+    blast_fail: list[str] = []
+    blast_stats = {}
+    for mode, plats in (("rendered", ALL_PLATFORMS), ("platform_sound", ["tiktok", "meta"])):
+        plan = blast.plan(blast_manifest, full_us, plats, music_mode=mode, total_budget=10000)
+        blast_stats[mode] = plan["summary"]
+        if plan["issues"]:
+            blast_fail.extend(f"{mode}: {i}" for i in plan["issues"][:3])
+    blast_elapsed = time.time() - t1
+
     # ---- report -------------------------------------------------------------
     n_moods = len(MOODS)
     print("ROLLOUT LAYER BENCHMARK")
@@ -109,7 +130,15 @@ def main() -> None:
     for line in dirty_plans[:10]:
         print(f"  ! {line}")
     print()
-    verdict = "PASS" if not dirty_plans and age_ok == n_seg and affinity_ok == n_seg and spotify_ok == n_seg else "FAIL"
+    for mode, s in blast_stats.items():
+        print(f"blast/{mode:15s} leaves={s['leaves']:>6,} briefs={s['unique_briefs']:>4} "
+              f"units={s['ad_units']:>6,} pop={s['addressable_pop_m']}M")
+    print(f"blast sweep: {blast_elapsed:.2f}s, gate-check failures {len(blast_fail)}")
+    for line in blast_fail[:6]:
+        print(f"  ! {line}")
+    print()
+    verdict = "PASS" if (not dirty_plans and not blast_fail and age_ok == n_seg
+                         and affinity_ok == n_seg and spotify_ok == n_seg) else "FAIL"
     print(f"VERDICT: {verdict}")
     raise SystemExit(0 if verdict == "PASS" else 1)
 

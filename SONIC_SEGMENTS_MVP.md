@@ -52,6 +52,18 @@ grounded in public streaming research. See `DEPLOYMENT.md` for the testing
 regime and per-platform launch mechanics; benchmarks via
 `python -m eval.rollout_benchmark`.
 
+**Blast mode** (`intelligence/audience_tree.py`, `data/audience_tree.json`)
+scales that to max reach through the real media-planning funnel: Market
+(tile-map of all 50 states + DC → 10 sonic regions → DMA drill-downs, plus
+intl markets) → Age band → Taste cluster. Every impression lands in exactly
+one leaf and every leaf gets a scored brief; thousands of leaves dedupe into
+a few hundred unique briefs. Two music modes: **rendered** (briefs map to
+this campaign's cuts) and **platform_sound** — one music-free master
+(voiceover preserved by the existing separation stack) + a precleared
+library pick per leaf via TikTok's Commercial Music Library / Meta's Sound
+Collection (`data/platform_music.json`): real songs, platform-licensed, no
+clearance, no re-render, launched as Spark Ads / Reels-ads-with-music.
+
 ### The two flows
 
 1. **Personal demo** — connect Spotify, pick a mood; the ad is re-scored with a

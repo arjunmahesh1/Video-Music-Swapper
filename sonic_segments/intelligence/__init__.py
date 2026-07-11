@@ -13,8 +13,11 @@ from .mood import MOODS, MoodProfile, detect_mood
 from .matching import rank_tracks, score_track
 from .quality import SourceQuality, probe_source_quality
 from .rollout import AdPlatformsKB, GeoKB, RolloutPlanner, validate_plan
+from .audience_tree import AudienceTree, BlastPlanner
 
 __all__ = [
+    "AudienceTree",
+    "BlastPlanner",
     "DemographicsKB",
     "MusicDirection",
     "AdPlatformsKB",
